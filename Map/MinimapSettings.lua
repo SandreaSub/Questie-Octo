@@ -6,6 +6,13 @@ S.defaults={
   -- Questie global map/minimap presentation defaults.
 
   enableMapIcons=true,
+  -- World Map available quest markers are restricted to the player's
+  -- physical zone by default.
+  showAvailableQuestMap=true,
+  -- Restore legacy all-zones World Map available quest markers.
+  showAvailableQuestMapAllZones=false,
+  -- Completed quest turn-ins are restricted to the player's current zone.
+  showTurninsCurrentZoneMap=true,
   -- Continent/world-overview-only master for available quest starts
   -- (including item starts) and completed turn-ins. Selected zone/city maps
   -- are unaffected; active objective markers remain independently controlled.
@@ -233,7 +240,8 @@ end
 function S:Set(key,value)
   if not self.db or SavedVariableBindingsChanged(self) then self:Initialize() end
 
-  if key=="enableMapIcons" or key=="showAllQuestsWorldMap" or key=="showSpecialQuestsWorldMap" or key=="enableObjectives" or key=="enableTurnins" or
+  if key=="enableMapIcons" or key=="showAvailableQuestMap" or key=="showAvailableQuestMapAllZones" or
+      key=="showTurninsCurrentZoneMap" or key=="showAllQuestsWorldMap" or key=="showSpecialQuestsWorldMap" or key=="enableObjectives" or key=="enableTurnins" or
       key=="enableAvailable" or key=="enableMiniMapIcons" or
       key=="alwaysGlowMap" or key=="alwaysGlowMinimap" or
       key=="questObjectiveColors" or key=="questMinimapObjectiveColors" or

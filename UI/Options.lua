@@ -366,20 +366,23 @@ local function CreateGeneralTab()
     args={
       world_map_visibility_header={type="header",order=2,name="World Map Visibility"},
       enableMapIcons={type="toggle",order=2.1,name="Show Quests",desc="Show quest icons on the main map.",width="full",get=GetValue,set=SetValue},
-      showAllQuestsWorldMap={type="toggle",order=2.2,name="Show Quests on the World Map",desc="Show normal quest pickup and turn-in icons on continent maps.",width="full",get=GetValue,set=SetValue},
-      showSpecialQuestsWorldMap={type="toggle",order=2.3,name="Show Special Quests on the World Map",desc="Show repeatable, PvP, and active event quest icons on continent maps.",width="full",get=GetValue,set=SetValue},
-      showMapFlightMaster={type="toggle",order=2.4,name="Show Flight Master on the World Map",desc="Show Flight Master icons on the map.",width="full",get=GetValue,set=SetValue},
+      showAvailableQuestMap={type="toggle",order=2.2,name="Show Available Quest Icons on World Map",desc="Show available quest-giver and item-start icons on the World Map. By default these are limited to your current physical zone.",width="full",get=GetValue,set=SetValue},
+      showAvailableQuestMapAllZones={type="toggle",order=2.3,name="Show Available Quest Icons in All Zones",desc="Show available quest-giver and item-start icons in every zone you browse on the World Map, restoring the previous behaviour.",width="full",disabled=function() return not Settings():Get("showAvailableQuestMap") end,get=GetValue,set=SetValue},
+      showTurninsCurrentZoneMap={type="toggle",order=2.4,name="Limit Turn-Ins to Current Zone",desc="Show completed quest ? icons on the World Map only while viewing the zone you are currently in.",width="full",get=GetValue,set=SetValue},
+      showAllQuestsWorldMap={type="toggle",order=2.5,name="Show Normal Quest Icons on Continent Maps",desc="Show normal quest-start and turn-in icons on continent maps when their World Map visibility is enabled.",width="full",get=GetValue,set=SetValue},
+      showSpecialQuestsWorldMap={type="toggle",order=2.6,name="Show Special Quests on Continent Maps",desc="Show repeatable, PvP, and event quest icons on continent maps when their World Map visibility is enabled.",width="full",get=GetValue,set=SetValue},
+      showMapFlightMaster={type="toggle",order=2.7,name="Show Flight Master on the World Map",desc="Show Flight Master icons on the map.",width="full",get=GetValue,set=SetValue},
       enableMiniMapIcons={type="toggle",order=3,name="Enable Minimap Icons",desc="Show quest icons on the minimap.",width="full",get=GetValue,set=SetValue},
       enableObjectives={type="toggle",order=4,name="Enable Objective Icons",desc="Show active quest objectives on the map and minimap.",width="full",get=GetValue,set=SetValue},
       enableTurnins={type="toggle",order=5,name="Enable Completed Quest Icons",desc="Show completed quest turn-ins on the map and minimap.",width="full",get=GetValue,set=SetValue},
-      enableAvailable={type="toggle",order=6,name="Enable Available Quest Icons",desc="Show available quests on the map and minimap.",width="full",get=GetValue,set=SetValue},
+      enableAvailable={type="toggle",order=6,name="Enable Available Quest Icons",desc="Show available quests on the minimap and World Map when enabled above.",width="full",get=GetValue,set=SetValue},
 
       objective_density_label={type="description",order=8,name="Objective",fontSize="medium",width="normal"},
       objectiveNodeDensity={type="select",order=8.1,name="",desc="Clustered groups nearby spawns. Full Nodes shows every known spawn.",width="normal",values={clustered="Clustered",full="Full Nodes"},get=GetValue,set=SetValue},
 
       item_start_header={type="header",order=9,name="Item-Start Quests"},
       showItemStartQuests={type="toggle",order=9.1,name="Show Item-Start Quests",desc="Show quests started by dropped or looted items.",width="full",get=GetValue,set=SetValue},
-      showItemStartMap={type="toggle",order=9.2,name="Show on World Map",desc="Show item-start quest sources on the World Map.",width="full",disabled=function() return not Settings():Get("showItemStartQuests") end,get=GetValue,set=SetValue},
+      showItemStartMap={type="toggle",order=9.2,name="Show on World Map",desc="Show item-start quest sources on the World Map.",width="full",disabled=function() return not Settings():Get("showItemStartQuests") or not Settings():Get("showAvailableQuestMap") end,get=GetValue,set=SetValue},
       showItemStartMinimap={type="toggle",order=9.3,name="Show on Minimap",desc="Show item-start quest sources on the minimap.",width="normal",disabled=function() return not Settings():Get("showItemStartQuests") end,get=GetValue,set=SetValue},
       itemStartDensity={type="select",order=9.4,name="",desc="Clustered groups nearby sources. Full Nodes shows every known source.",width="normal",values={clustered="Clustered",full="Full Nodes"},disabled=function() return not Settings():Get("showItemStartQuests") end,get=GetValue,set=SetValue},
 

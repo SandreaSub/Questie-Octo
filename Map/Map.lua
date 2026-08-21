@@ -48,12 +48,14 @@ local function IsRoleEnabled(role)
   if not settings:Get("enableMapIcons") then return false end
 
   if role=="itemStart" then
-    return settings:Get("enableAvailable")
+    return settings:Get("showAvailableQuestMap")
+       and settings:Get("enableAvailable")
        and settings:Get("showItemStartQuests")
        and settings:Get("showItemStartMap")
        and true or false
   elseif role=="available" then
-    return settings:Get("enableAvailable") and true or false
+    return settings:Get("showAvailableQuestMap")
+       and settings:Get("enableAvailable") and true or false
   elseif role=="turnin" then
     return settings:Get("enableTurnins") and true or false
   else
@@ -390,6 +392,17 @@ local function DisplayedContextKey()
   return nil
 end
 
+local function IsDisplayedMapPlayerCurrentZone(mapID)
+  mapID=tonumber(mapID)
+  if not mapID or not QuestieOcto.API or not QuestieOcto.API.GetBestMapForPlayer then return false end
+
+  local playerMapID=QuestieOcto.API:GetBestMapForPlayer()
+  if not playerMapID and QuestieOcto.Minimap then
+    playerMapID=QuestieOcto.Minimap.physicalMapID
+  end
+  return tonumber(playerMapID)==mapID
+end
+
 local function OpenContinentZoneForPin(pin)
   if not pin or not pin.continentZoneMapID or not SetMapZoom or not GetMapZones then return false end
   local continent=GetCurrentMapContinent and GetCurrentMapContinent() or 0
@@ -708,6 +721,15 @@ end
 
 function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
   if not IsRoleEnabled(node.role) or not IsPvPQuestNodeEnabled(node) then return nil end
+  if (node.role=="available" or node.role=="itemStart")
+     and not DisplaySettings():Get("showAvailableQuestMapAllZones")
+     and not self.displayingPlayerZone then
+    return nil
+  end
+  if node.role=="turnin" and DisplaySettings():Get("showTurninsCurrentZoneMap")
+     and not self.displayingPlayerZone then
+    return nil
+  end
 
   local pin=self.frames[key]
 
@@ -1430,8 +1452,13 @@ end
 local function AddContinentRareItemStart(groups,node,mapID)
   if not node or node.role~="itemStart" or not QuestieOcto.ItemStartAreas:IsZoneWideRareChance(node.chance) then return false end
   -- Consume ultra-rare nodes even when their world-map category is disabled so
-  -- they do not fall back to an ordinary continent renderer.
-  if not IsRoleEnabled(node.role) or not IsPvPQuestNodeEnabled(node) or not IsQuestMarkerNodeEnabled(node) then return true end
+  -- they do not fall back to the ordinary continent renderer.
+  if not IsRoleEnabled(node.role)
+      or not IsPvPQuestNodeEnabled(node)
+      or not IsQuestMarkerNodeEnabled(node)
+      or (not DisplaySettings():Get("showAvailableQuestMapAllZones") and not M.displayingPlayerZone) then
+    return true
+  end
   local projection=QuestieOcto.ContinentProjection
   if not projection then return false end
   local key=tostring(node.questID)..":"..tostring(node.itemID or 0)
@@ -1538,6 +1565,7 @@ function M:StartContinentSync(continentMapID,doPrune)
 
   local contextKey=-1000-continentMapID
   if tonumber(self.mapID)~=contextKey then self:SetMap(contextKey) end
+  self.displayingPlayerZone=false
   if not QuestieOcto.Nodes.ready then self.syncing=false; return end
 
   self.generation=self.generation+1
@@ -1634,6 +1662,7 @@ function M:StartSync(doPrune)
   end
 
   if tonumber(self.mapID)~=tonumber(mapID) then self:SetMap(mapID) end
+  self.displayingPlayerZone=IsDisplayedMapPlayerCurrentZone(mapID)
 
   self.generation=self.generation+1
   local generation=self.generation
@@ -1773,7 +1802,9 @@ function M:ApplySettings()
 end
 
 function M:OnSettingChanged(key,value)
-  if key=="enableMapIcons" or key=="showAllQuestsWorldMap" or key=="showSpecialQuestsWorldMap" or key=="showPvPRelatedQuests" or key=="enableObjectives" or key=="enableTurnins" or
+  if key=="enableMapIcons" or key=="showAvailableQuestMap" or key=="showAvailableQuestMapAllZones" or
+     key=="showTurninsCurrentZoneMap" or key=="showAllQuestsWorldMap" or
+     key=="showSpecialQuestsWorldMap" or key=="showPvPRelatedQuests" or key=="enableObjectives" or key=="enableTurnins" or
      key=="enableAvailable" or key=="showItemStartQuests" or key=="showItemStartMap" or
      key=="showMapAuctioneer" or key=="showMapBanker" or
      key=="showMapFlightMaster" or key=="showMapMailbox" or
@@ -1993,6 +2024,7 @@ QuestieOcto:RegisterMessage("PREPARED_MAP_READY",M,"OnPreparedMapReady")
 
 local f=CreateFrame("Frame","QuestieOctoWorldMapEvents",UIParent)
 f:RegisterEvent("WORLD_MAP_UPDATE")
+f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_LEVEL_UP")
 f:SetScript("OnEvent",function()
   if event=="WORLD_MAP_UPDATE" then
@@ -2005,6 +2037,13 @@ f:SetScript("OnEvent",function()
     QuestieOcto.Scheduler:After(0.01,function()
       if WorldMapFrame and WorldMapFrame:IsVisible() then M:RequestSync(true) end
     end,"map-gray-level-refresh")
+  end
+  if event=="ZONE_CHANGED_NEW_AREA" then
+    QuestieOcto.Scheduler:After(0.01,function()
+      if WorldMapFrame and WorldMapFrame:IsVisible() then
+        M:RequestSync(true)
+      end
+    end,"map-current-zone-refresh")
   end
 end)
 
