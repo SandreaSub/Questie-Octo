@@ -11,6 +11,9 @@ S.defaults={
   -- require their separate Special gate. Zone/city maps/objectives are unaffected.
   showAvailableQuestsWorldMap=true,
   showCompletedQuestsWorldMap=true,
+  -- Restrict World Map quest-state markers to the player's current zone.
+  showAvailableQuestMapCurrentZone = true,
+  showTurninsCurrentZoneMap = true,
   -- Continent/world-overview-only master for special quest markers:
   -- repeatable (blue), PvP (red), and verified seasonal/event (green).
   -- Selected zone/city maps are unaffected.
@@ -261,6 +264,7 @@ function S:Set(key,value)
   if not self.db or SavedVariableBindingsChanged(self) then self:Initialize() end
 
   if key=="enableMapIcons" or key=="showAvailableQuestsWorldMap" or key=="showCompletedQuestsWorldMap" or key=="showSpecialQuestsWorldMap" or key=="enableObjectives" or key=="enableTurnins" or
+      key=="showAvailableQuestMapCurrentZone" or key=="showTurninsCurrentZoneMap" or
       key=="enableAvailable" or key=="enableMiniMapIcons" or
       key=="alwaysGlowMap" or key=="alwaysGlowMinimap" or
       key=="questObjectiveColors" or key=="questMinimapObjectiveColors" or

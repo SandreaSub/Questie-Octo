@@ -375,6 +375,31 @@ local function CreateGeneralTab()
       enableTurnins={type="toggle",order=5,name="Enable Completed Quest Icons",desc="Show completed quest turn-ins on the map and minimap.",width="full",get=GetValue,set=SetValue},
       enableAvailable={type="toggle",order=6,name="Enable Available Quest Icons",desc="Show available quests on the map and minimap.",width="full",get=GetValue,set=SetValue},
 
+      showAvailableQuestMapCurrentZone = {
+        type = "toggle",
+        order = 2.21,
+        name = "Limit Available Quests to Current Zone",
+        desc = "Only show available quest-giver and item-start icons on the World Map while viewing your current zone.",
+        width = "full",
+        disabled = function()
+          return not Settings():Get("showAvailableQuestsWorldMap")
+        end,
+        get = GetValue,
+        set = SetValue
+      },
+      showTurninsCurrentZoneMap = {
+        type = "toggle",
+        order = 2.31,
+        name = "Limit Turn-Ins to Current Zone",
+        desc = "Only show completed quest ? icons on the World Map while viewing your current zone.",
+        width = "full",
+        disabled = function()
+          return not Settings():Get("showCompletedQuestsWorldMap")
+        end,
+        get = GetValue,
+        set = SetValue
+      },
+
       objective_density_label={type="description",order=8,name="Objective",fontSize="medium",width="normal"},
       objectiveNodeDensity={type="select",order=8.1,name="",desc="Clustered groups nearby spawns. Full Nodes shows every known spawn.",width="normal",values={clustered="Clustered",full="Full Nodes"},get=GetValue,set=SetValue},
 

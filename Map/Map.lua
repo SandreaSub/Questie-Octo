@@ -21,15 +21,35 @@ local function IsQuestMarkerNodeEnabled(node)
   -- Available/Completed are the broad continent quest-state gates. Special
   -- Quests remains an additional category gate, so disabling Available really
   -- removes every pickup `!` (including special ones) while leaving turn-ins.
-  if node and node.role=="turnin" then
+  if node and node.role == "turnin" then
     if not settings:Get("showCompletedQuestsWorldMap") then return false end
+    if settings:Get("showTurninsCurrentZoneMap") and not M.displayingPlayerZone then
+      return false
+    end
   else
     if not settings:Get("showAvailableQuestsWorldMap") then return false end
+    if settings:Get("showAvailableQuestMapCurrentZone") and not M.displayingPlayerZone then
+      return false
+    end
   end
   if IsSpecialQuestNode(node) then
     return settings:Get("showSpecialQuestsWorldMap") and true or false
   end
   return true
+end
+
+local function IsDisplayedMapPlayerCurrentZone(mapID)
+  mapID = tonumber(mapID)
+  if not mapID or not QuestieOcto.API or not QuestieOcto.API.GetBestMapForPlayer then
+    return false
+  end
+
+  local playerMapID = QuestieOcto.API:GetBestMapForPlayer()
+  if not playerMapID and QuestieOcto.Minimap then
+    playerMapID = QuestieOcto.Minimap.physicalMapID
+  end
+
+  return tonumber(playerMapID) == mapID
 end
 
 local function IsPvPQuestNodeEnabled(node)
@@ -73,6 +93,7 @@ end
 M.enabled=true
 M.mapID=nil
 M.generation=0
+M.displayingPlayerZone = false
 M.syncing=false
 M.resync=false
 M.prune=false
@@ -1705,6 +1726,7 @@ local function ClearChangedContinentItemAreas(registry,changed)
 end
 
 function M:StartContinentSync(continentMapID,doPrune)
+  self.displayingPlayerZone = false
   continentMapID=tonumber(continentMapID)
   if continentMapID==nil or not QuestieOcto.ContinentProjection then return end
 
@@ -1792,10 +1814,12 @@ function M:StartSync(doPrune)
     return
   end
 
-  local specialContext=DisplayedSpecialMapContext(mapID)
-  if tonumber(self.mapID)~=tonumber(mapID) or self.specialMapContext~=specialContext then
-    self:SetMap(mapID,specialContext)
+  local specialContext = DisplayedSpecialMapContext(mapID)
+  if tonumber(self.mapID) ~= tonumber(mapID) or self.specialMapContext ~= specialContext then
+    self:SetMap(mapID, specialContext)
   end
+
+  self.displayingPlayerZone = IsDisplayedMapPlayerCurrentZone(mapID)
 
   if not QuestieOcto.PreparedMap:Get(mapID) then
     -- Any map the player actually opens becomes top priority immediately.
@@ -1949,6 +1973,7 @@ end
 
 function M:OnSettingChanged(key,value)
   if key=="enableMapIcons" or key=="showAvailableQuestsWorldMap" or key=="showCompletedQuestsWorldMap" or key=="showSpecialQuestsWorldMap" or key=="showPvPRelatedQuests" or key=="enableObjectives" or key=="enableTurnins" or
+     key == "showAvailableQuestMapCurrentZone" or key == "showTurninsCurrentZoneMap" or
      key=="enableAvailable" or key=="showItemStartQuests" or key=="showItemStartMap" or
      key=="showMapAuctioneer" or key=="showMapBanker" or
      key=="showMapFlightMaster" or key=="showMapMailbox" or
@@ -2170,13 +2195,18 @@ QuestieOcto:RegisterMessage("PREPARED_MAP_READY",M,"OnPreparedMapReady")
 
 local f=CreateFrame("Frame","QuestieOctoWorldMapEvents",UIParent)
 f:RegisterEvent("WORLD_MAP_UPDATE")
+f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_LEVEL_UP")
 f:SetScript("OnEvent",function()
-  if event=="WORLD_MAP_UPDATE" then
+  if event == "WORLD_MAP_UPDATE" then
     if WorldMapFrame and WorldMapFrame:IsVisible() then
       M:EnsureDisplayedContextCurrent()
     end
-  elseif event=="PLAYER_LEVEL_UP" then
+  elseif event == "ZONE_CHANGED_NEW_AREA" then
+    if WorldMapFrame and WorldMapFrame:IsVisible() then
+      M:RequestSync(true)
+    end
+  elseif event == "PLAYER_LEVEL_UP" then
     -- Gray classification depends only on the current player/quest levels.
     -- Rebind the visible map presentation; do not rebuild geometry or quest truth.
     QuestieOcto.Scheduler:After(0.01,function()
