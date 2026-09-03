@@ -1,3 +1,12 @@
+1.0.95 - HIGH-CONTRAST PER-QUEST OBJECTIVE COLORS
+--------------------------------------------------
+- Built directly from the accepted 1.0.94 baseline after its rapid World Map transition correction was live-validated.
+- Replaced Questie 5.2.3's compressed 0.45..0.95-per-channel objective palette with pfQuest's full-range deterministic RGB hash.
+- Questie-Octo keys the hash from a fixed `quest` namespace plus numeric quest ID rather than localized quest title, preserving identical quest colors across client languages and avoiding duplicate-title ambiguity.
+- Full Nodes use the resulting quest color directly; the previous extra 0.72 RGB darkening was removed because it made dark colors from the wider palette unnecessarily hard to see.
+- Clustered objective glow/contour now uses GetQuestColor(questID) instead of questID + objectiveIndex, making every objective of the same quest share one color on both World Map and minimap.
+- Available/turn-in/special/service markers are unchanged. No database, map discovery, polling, scheduler, or SavedVariables behavior changed.
+
 1.0.94 - RAPID WORLD-MAP CONTEXT CANCELLATION
 ------------------------------------------------
 - Re-audited the failed 1.0.93 rapid zoom-out test against the accepted 1.0.92 source, the supplied current BlizzardInterfaceCode(6), the live failure screenshot, and Questie-Octo's asynchronous continent renderer. The screenshot shows the client already displaying the two-continent World texture while its title/context still says Kalimdor, proving that texture and continent index can briefly disagree during a fast zoom-out.

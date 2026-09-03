@@ -410,8 +410,8 @@ local function CreateMapTab()
     name="Map", type="group", order=10,
     args={
       map_options={type="header",order=1,name="Map Options"},
-      alwaysGlowMap={type="toggle",order=1.1,name="Enable Map Icon Glow",desc="Add a colored glow behind objective icons.",width="full",get=GetValue,set=SetValue},
-      questObjectiveColors={type="toggle",order=1.2,name="Enable Different Map Icon Color for Each Quest",desc="Use a different color for each quest's objective icons.",width="full",get=GetValue,set=SetValue},
+      alwaysGlowMap={type="toggle",order=1.1,name="Enable Map Icon Glow",desc="Add a colored glow behind objective icons using that quest's stable color.",width="full",get=GetValue,set=SetValue},
+      questObjectiveColors={type="toggle",order=1.2,name="Enable Different Map Icon Color for Each Quest",desc="Use a different stable color for each quest's objective icons.",width="full",get=GetValue,set=SetValue},
       globalScale={type="range",order=2.2,name="Global Scale for Map Icons",desc="Adjust map icon size.",width="double",min=0.01,max=4,step=0.01,disabled=function() return not Settings():Get("enableMapIcons") end,get=GetValue,set=SetValue},
 
       miscellaneous_icons={type="header",order=20,name="Miscellaneous icons"},
@@ -436,8 +436,8 @@ local function CreateMinimapTab()
     name="Minimap", type="group", order=11,
     args={
       options_header={type="header",order=1,name="Minimap Options"},
-      alwaysGlowMinimap={type="toggle",order=1.1,name="Enable Minimap Icon Glow",desc="Add a colored glow behind objective icons.",width="full",disabled=function() return not EnabledMinimap() end,get=GetValue,set=SetValue},
-      questMinimapObjectiveColors={type="toggle",order=1.2,name="Enable Different Minimap Icon Color for Each Quest",desc="Use a different color for each quest's objective icons.",width="full",disabled=function() return not EnabledMinimap() end,get=GetValue,set=SetValue},
+      alwaysGlowMinimap={type="toggle",order=1.1,name="Enable Minimap Icon Glow",desc="Add a colored glow behind objective icons using that quest's stable color.",width="full",disabled=function() return not EnabledMinimap() end,get=GetValue,set=SetValue},
+      questMinimapObjectiveColors={type="toggle",order=1.2,name="Enable Different Minimap Icon Color for Each Quest",desc="Use a different stable color for each quest's objective icons.",width="full",disabled=function() return not EnabledMinimap() end,get=GetValue,set=SetValue},
       globalMiniMapScale={type="range",order=2.2,name="Global Scale for Minimap Icons",desc="Adjust minimap icon size.",width="double",min=0.01,max=4,step=0.01,disabled=function() return not EnabledMinimap() end,get=GetValue,set=SetValue},
 
       miscellaneous_icons={type="header",order=20,name="Miscellaneous icons"},

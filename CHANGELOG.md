@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.0.95
+- Improved per-quest objective colors so dense quest areas use a much wider, easier-to-distinguish palette inspired by pfQuest.
+- Full Nodes now use the wider quest color directly instead of muting it toward similar dark/pastel shades.
+- Clustered Map/Minimap icon glow now follows the same stable per-quest color, so every objective from one quest shares one visual identity.
+
 ## 1.0.94
 - Fixed World Map pins being stranded on the two-continent World overview when zooming out faster than an asynchronous continent render could finish.
 - The global World texture is now recognized even during the client's brief stale-continent transition, so it can never be mistaken for Kalimdor or map ID 0.

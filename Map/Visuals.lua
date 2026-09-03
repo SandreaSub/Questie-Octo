@@ -8,27 +8,45 @@ local function Settings()
   return QuestieOcto.MinimapSettings
 end
 
-local function NextRandom(seed)
-  seed=math.mod(seed*214013+2531011,4294967296)
-  local value=math.mod(math.floor(seed/65536),32768)/32767
-  return seed,value
-end
+local questColorCache={}
 
-local function SeedColor(seed)
-  seed=tonumber(seed) or 0
-  local r,g,b
-  seed,r=NextRandom(seed)
-  seed,g=NextRandom(seed)
-  seed,b=NextRandom(seed)
-  return 0.45+r/2,0.45+g/2,0.45+b/2
+local function HashColor(text)
+  text=tostring(text or "")
+  local cached=questColorCache[text]
+  if cached then return cached[1],cached[2],cached[3] end
+
+  -- pfQuest-style full-range deterministic RGB hash. Questie-Octo keys this
+  -- from the numeric quest ID rather than the localized quest title, so the
+  -- same quest keeps the same color on every client language.
+  local counter=1
+  local length=string.len(text)
+  local i
+  for i=1,length,3 do
+    counter=math.mod(counter*8161,4294967279)
+      +(string.byte(text,i)*16776193)
+      +((string.byte(text,i+1) or (length-i+256))*8372226)
+      +((string.byte(text,i+2) or (length-i+256))*3932164)
+  end
+
+  local hash=math.mod(math.mod(counter,4294967291),16777216)
+  local r=(hash-math.mod(hash,65536))/65536
+  local remainder=hash-r*65536
+  local g=(remainder-math.mod(remainder,256))/256
+  local b=remainder-g*256
+  r,g,b=r/255,g/255,b/255
+
+  questColorCache[text]={r,g,b}
+  return r,g,b
 end
 
 function V:GetQuestColor(questID)
-  return SeedColor(tonumber(questID) or 0)
+  return HashColor("quest"..tostring(tonumber(questID) or 0))
 end
 
 function V:GetObjectiveColor(questID,objectiveIndex)
-  return SeedColor((tonumber(questID) or 0)+32768*(tonumber(objectiveIndex) or 0))
+  -- Retained for compatibility with older internal callers. Current objective
+  -- presentation intentionally uses GetQuestColor so one quest = one color.
+  return HashColor("objective"..tostring(tonumber(questID) or 0)..":"..tostring(tonumber(objectiveIndex) or 0))
 end
 
 function V:IsObjectiveRole(role)
@@ -101,7 +119,9 @@ function V:ApplyPin(pin,node,isMinimap,alpha)
   if pin.texture then pin.texture:SetVertexColor(r,g,b,alpha) end
 
   if objective and glowEnabled and pin.glowTexture then
-    local gr,gg,gb=self:GetObjectiveColor(node.questID,node.objectiveIndex)
+    -- Clustered glow/contour follows the quest color too: one quest keeps
+    -- one stable color across every objective, on map and minimap.
+    local gr,gg,gb=self:GetQuestColor(node.questID)
     pin.glowR,pin.glowG,pin.glowB=gr,gg,gb
     pin.glowTexture:SetVertexColor(gr,gg,gb,alpha)
     self:ResizeGlow(pin)
@@ -118,8 +138,10 @@ function V:ApplyFullNode(pin,node,isMinimap,alpha)
   -- Full Nodes use pfQuest's native 14px baseline and 15% transparency;
   -- the user's only size control is the global map/minimap scale.
   alpha=(tonumber(alpha) or 1)*0.85
+  -- Full Nodes use the same wide per-quest color directly. Do not darken
+  -- it again: pfQuest already relies on alpha/texture shape for subduing the
+  -- node, and multiplying the wider palette would make dark colors vanish.
   local r,g,b=self:GetQuestColor(node.questID)
-  r,g,b=r*0.72,g*0.72,b*0.72
   pin.iconR,pin.iconG,pin.iconB=r,g,b
   pin.texture:SetTexture("Interface\\AddOns\\Questie-Octo\\UI\\Icons\\pfquest_node")
   pin.texture:SetVertexColor(r,g,b,alpha)
