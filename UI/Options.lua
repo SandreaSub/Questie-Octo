@@ -317,6 +317,44 @@ local function EnabledMinimap()
   return Settings():Get("enableMiniMapIcons") and true or false
 end
 
+local OBJECTIVE_COLOR_VISION_VALUES={
+  [1]="Default",
+  [2]="Red-deficient",
+  [3]="Green-deficient",
+  [4]="Blue-deficient",
+  [5]="High Contrast"
+}
+local OBJECTIVE_COLOR_VISION_KEYS={
+  [1]="default",
+  [2]="protan",
+  [3]="deutan",
+  [4]="tritan",
+  [5]="highContrast"
+}
+local OBJECTIVE_COLOR_VISION_INDEX={
+  default=1,
+  protan=2,
+  deutan=3,
+  tritan=4,
+  highContrast=5
+}
+
+local function GetObjectiveColorVisionValue(info)
+  return OBJECTIVE_COLOR_VISION_INDEX[Settings():Get("objectiveColorVisionMode")] or 1
+end
+
+local function SetObjectiveColorVisionValue(info,value)
+  local mode=OBJECTIVE_COLOR_VISION_KEYS[tonumber(value) or 1] or "default"
+  O.stats.lastSetKey="objectiveColorVisionMode"
+  O.stats.lastSetValue=tostring(mode)
+  local changed=Settings():Set("objectiveColorVisionMode",mode)
+  if changed then O.stats.changes=O.stats.changes+1 end
+  if O.configFrame and O.configFrame.SetStatusText then
+    O.configFrame:SetStatusText(nil)
+  end
+  ClearSavedConfigPosition()
+end
+
 local function CreateQuestBrowserFooterButton(configFrame)
   if not configFrame or not configFrame.frame or configFrame.questieOctoQuestBrowserButton then return end
 
@@ -519,6 +557,11 @@ local function CreateQuestTab()
   tab.args.showZoneLevelRanges={type="toggle",order=10,name="Show Zone Level Ranges",desc="Show the recommended level range and Friendly, Hostile, or Contested status when hovering a zone on the continent World Map.",width="full",get=GetValue,set=SetValue}
   tab.args.useDarkTheme={type="toggle",order=11,name="Enable Dark Theme",desc="Use Questie-Octo's dark Shagu-style options appearance. This only skins the Questie-Octo settings window.",width="full",get=GetValue,set=SetValue}
   tab.args.showMinimapButton={type="toggle",order=12,name="Show Minimap Button",desc="Show the Questie-Octo settings button. Minimap-button panels can manage it like a normal addon button. Requires /reload when changed. When disabled, the button frame is not created at all.",width="full",get=GetValue,set=SetMinimapButtonValue}
+
+  tab.args.accessibility_header={type="header",order=15,name="Accessibility"}
+  tab.args.objectiveColorVisionLabel={type="description",order=16,name="Objective Color Vision",fontSize="medium",width="normal"}
+  tab.args.objectiveColorVisionMode={type="select",order=16.1,name="",desc="Adjust active-objective quest colors for color-vision accessibility. This affects Full Nodes and enabled Clustered objective tint/glow on both the World Map and minimap.",width="normal",values=OBJECTIVE_COLOR_VISION_VALUES,get=GetObjectiveColorVisionValue,set=SetObjectiveColorVisionValue}
+
   tab.args.reset_header={type="header",order=20,name="Reset Questie Options"}
   tab.args.reset_text={type="description",order=21,name="Quest data and completed-quest history are not deleted.",fontSize="medium"}
   tab.args.resetOptions={type="execute",order=22,name="Reset Options",desc="Restore option defaults.",func=function()

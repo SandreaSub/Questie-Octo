@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.0.96
+- Added **Other → Accessibility → Objective Color Vision** with Default, Red-deficient, Green-deficient, Blue-deficient, and High Contrast modes.
+- Accessibility modes recolor active quest objectives consistently across Full Nodes, Clustered objective colors, and enabled map/minimap glow without changing available, completed, special, rare, or service markers.
+- Default mode preserves the validated 1.0.95 quest colors exactly, and changing modes refreshes visible map/minimap pins immediately without rebuilding quest nodes.
+
 ## 1.0.95
 - Improved per-quest objective colors so dense quest areas use a much wider, easier-to-distinguish palette inspired by pfQuest.
 - Full Nodes now use the wider quest color directly instead of muting it toward similar dark/pastel shades.

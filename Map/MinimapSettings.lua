@@ -122,6 +122,11 @@ S.defaults={
   useDarkTheme=true,
   showMinimapButton=true,
 
+  -- Global display preference for active-objective quest colors. Default keeps
+  -- the accepted 1.0.95 palette exactly; the other values are accessibility
+  -- remaps applied centrally by Visuals:GetQuestColor().
+  objectiveColorVisionMode="default",
+
   -- Quest automation is character-local and opt-in. These conservative
   -- defaults mirror Questie 6's disabled-by-default automation posture while
   -- keeping repeatable quests and gray/trivial acceptance independently gated.
@@ -294,6 +299,9 @@ function S:Set(key,value)
     if value~="clustered" and value~="full" then return false end
   elseif key=="globalMiniMapScale" then
     value=Clamp(value,0.01,4)
+  elseif key=="objectiveColorVisionMode" then
+    if value~="default" and value~="protan" and value~="deutan" and
+       value~="tritan" and value~="highContrast" then return false end
   elseif key=="trackerSort" then
     if value~="zone" and value~="level" then return false end
   elseif key=="trackerFontSize" then
@@ -456,7 +464,8 @@ function S:Set(key,value)
   end
 
   if key=="alwaysGlowMap" or key=="alwaysGlowMinimap" or
-     key=="questObjectiveColors" or key=="questMinimapObjectiveColors" then
+     key=="questObjectiveColors" or key=="questMinimapObjectiveColors" or
+     key=="objectiveColorVisionMode" then
     if QuestieOcto.Map and QuestieOcto.Map.RefreshVisualSettings then
       QuestieOcto.Map:RefreshVisualSettings()
     end

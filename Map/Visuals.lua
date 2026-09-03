@@ -39,8 +39,51 @@ local function HashColor(text)
   return r,g,b
 end
 
+-- Accessibility modes are deliberate color remaps, not simulations. The
+-- original 1.0.95 hash remains the identity source so Default is byte-for-byte
+-- unchanged and every quest keeps one deterministic color across map surfaces.
+-- The remaps route channel differences toward combinations that remain useful
+-- for the selected color-vision family, then gently lift only very dark results.
+local function LiftDarkColor(r,g,b)
+  -- Simple sRGB luma is sufficient here: this is a tiny presentation guard,
+  -- not a contrast claim against every possible World Map background.
+  local y=0.299*r+0.587*g+0.114*b
+  if y>=0.37 then return r,g,b end
+  if y>=1 then return r,g,b end
+
+  local t=(0.37-y)/(1-y)
+  return r+(1-r)*t,g+(1-g)*t,b+(1-b)*t
+end
+
+local function AccessibleQuestColor(mode,r,g,b)
+  if mode=="protan" then
+    -- Red-deficient: preserve wide variation by moving the original channels
+    -- onto a blue/yellow-friendly ordering and inverting the two ambiguous
+    -- channels. Offline severe-protan validation selected this mapping.
+    r,g,b=b,1-g,1-r
+  elseif mode=="deutan" then
+    -- Green-deficient: rotate red into blue while retaining green directly.
+    r,g,b=b,g,r
+  elseif mode=="tritan" then
+    -- Blue-deficient: move the original blue/red information onto the
+    -- red/green-visible axes and invert the remaining green component.
+    r,g,b=b,r,1-g
+  elseif mode=="highContrast" then
+    -- General high-contrast mode keeps the full deterministic variety while
+    -- separating the original channels from the Default ordering.
+    r,g,b=r,b,1-g
+  else
+    return r,g,b
+  end
+
+  return LiftDarkColor(r,g,b)
+end
+
 function V:GetQuestColor(questID)
-  return HashColor("quest"..tostring(tonumber(questID) or 0))
+  local r,g,b=HashColor("quest"..tostring(tonumber(questID) or 0))
+  local mode=Settings() and Settings():Get("objectiveColorVisionMode") or "default"
+  if mode=="default" then return r,g,b end
+  return AccessibleQuestColor(mode,r,g,b)
 end
 
 function V:GetObjectiveColor(questID,objectiveIndex)

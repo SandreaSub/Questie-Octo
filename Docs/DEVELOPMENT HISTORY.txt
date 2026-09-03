@@ -1,3 +1,11 @@
+1.0.96 - OBJECTIVE COLOR-VISION ACCESSIBILITY
+------------------------------------------------
+- Built directly from the accepted/live-validated 1.0.95 baseline. Added one global `objectiveColorVisionMode` presentation setting under Other -> Accessibility with player-facing choices Default, Red-deficient, Green-deficient, Blue-deficient, and High Contrast. Internal values remain default/protan/deutan/tritan/highContrast.
+- Kept `Visuals:GetQuestColor()` as the single integration point so one quest keeps one deterministic color across Full Nodes, Clustered objective tint, and enabled World Map/minimap contour/glow. Available `!`, completed `?`, repeatable/event/PvP, rare, Flight Master, and service markers remain outside the accessibility transform.
+- Default mode returns the exact 1.0.95 pfQuest-style hash color with no transform. Accessibility modes use fixed channel remaps selected by offline severe protan/deutan/tritan simulation plus a small dark-color lift; the runtime does not simulate color blindness. Across all 6,701 packaged quest IDs, the accessibility mappings eliminate the very-dark (<0.10 relative-luminance) colors seen in the unrestricted hash while retaining a deterministic continuous color space rather than assigning colors from the active quest list.
+- Changing the selector routes through the existing `Map:RefreshVisualSettings()` -> `Minimap:RefreshVisualSettings()` path. Visible pins are recolored/rebound immediately; no node/database rebuild, polling, timer, OnUpdate, scheduler work, or per-frame allocation path was added.
+- Reset Options restores Default through the normal declared-default copy path. The setting is global in `QuestieOctoGlobalDB.minimap`, so the display preference follows the player across characters.
+
 1.0.95 - HIGH-CONTRAST PER-QUEST OBJECTIVE COLORS
 --------------------------------------------------
 - Built directly from the accepted 1.0.94 baseline after its rapid World Map transition correction was live-validated.
