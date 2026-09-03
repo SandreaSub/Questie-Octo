@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.0.94
+- Fixed World Map pins being stranded on the two-continent World overview when zooming out faster than an asynchronous continent render could finish.
+- The global World texture is now recognized even during the client's brief stale-continent transition, so it can never be mistaken for Kalimdor or map ID 0.
+- Abandoning a map render now hides both the last completed pin set and any pins already drawn by the unfinished render.
+
 ## 1.0.92
 - Shift + Left Click on a quest while typing in chat now inserts a clickable quest link instead of plain quest-name text.
 - Normal Shift + Left Click tracking/untracking is unchanged when the chat box is closed.

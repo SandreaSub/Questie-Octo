@@ -358,9 +358,33 @@ local function UpdatePosition(pin,x,y,offsetX,offsetY)
   )
 end
 
+local function IsGlobalWorldOverview()
+  -- The current Turtle/Octo FrameXML can transiently keep the previous
+  -- continent index while GetMapInfo() has already switched to the two-
+  -- continent World texture. It also treats continent IDs above
+  -- CONTINENTS_LENGTH as the global overview. Texture identity is therefore
+  -- the primary signal; the client sentinel is a second fail-closed guard.
+  local textureName=QuestieOcto.API and QuestieOcto.API.GetDisplayedMapTextureName
+    and QuestieOcto.API:GetDisplayedMapTextureName() or nil
+  if textureName=="World" then return true end
+
+  local cid=GetCurrentMapContinent and tonumber(GetCurrentMapContinent()) or nil
+  local maxContinents=tonumber(CONTINENTS_LENGTH)
+  if cid and maxContinents and cid>maxContinents then return true end
+
+  -- Native WorldMapFrame falls back to the World texture when GetMapInfo() is
+  -- temporarily unavailable. Only fail closed on an empty identity here; do
+  -- not reject cid<=0 by itself because custom instance/detail maps can be
+  -- identified safely through their texture.
+  if not textureName and (not cid or cid<=0) then return true end
+  return false
+end
+
 local function DisplayedMapID()
   local cid=GetCurrentMapContinent and GetCurrentMapContinent() or 0
   local zid=GetCurrentMapZone and GetCurrentMapZone() or 0
+
+  if IsGlobalWorldOverview() then return nil end
 
   -- ClassicAPI exposes WorldMapArea.dbc as texture-dir -> AreaTable ID. This is
   -- the authoritative way to distinguish custom instances/wings that share the
@@ -394,6 +418,7 @@ local function DisplayedMapID()
 end
 
 local function DisplayedContinentMapID()
+  if IsGlobalWorldOverview() then return nil end
   local cid=GetCurrentMapContinent and GetCurrentMapContinent() or 0
   local zid=GetCurrentMapZone and GetCurrentMapZone() or 0
   if not cid or cid<=0 or (zid and zid>0) then return nil end
@@ -1023,12 +1048,27 @@ function M:RemoveQuest(questID)
 end
 
 function M:HideAll()
-  for _,pin in pairs(self.activeFrames or {}) do
-    if pin:IsShown() then
-      pin:Hide()
-      self.stats.hidden=self.stats.hidden+1
+  -- A map change can interrupt an asynchronous zone/continent render after
+  -- some new pins have already been shown but before Finish() promotes them to
+  -- activeFrames. Hide both the last completed set and that unpublished build
+  -- set so invalidating a generation can never strand visible pins on the next
+  -- map texture. The same frame can exist in both lists when it is being reused,
+  -- so de-duplicate before counting/hiding it.
+  local seen={}
+  local function hideList(list)
+    for _,pin in pairs(list or {}) do
+      if pin and not seen[pin] then
+        seen[pin]=true
+        if pin:IsShown() then
+          pin:Hide()
+          M.stats.hidden=M.stats.hidden+1
+        end
+      end
     end
   end
+
+  hideList(self.activeFrames)
+  hideList(self.buildActiveFrames)
   self.activeFrames={}
   self.buildActiveFrames=nil
   self.stats.active=0
