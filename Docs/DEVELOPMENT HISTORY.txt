@@ -1,3 +1,13 @@
+1.02 - TRACKER-HOVER OBJECTIVE FOCUS
+------------------------------------------------------------
+- Built from accepted 1.01. Hovering an active quest title in Questie-Octo's tracker now sets a transient quest-ID focus shared by World Map and minimap presentation. Leaving the row, hiding the tracker, or changing focus restores normal presentation immediately.
+- Focus is visual-only: no canonical Nodes rebuild, PreparedMap rebuild, candidate discovery, World Map sync, minimap rediscovery, timer, or polling loop is triggered by hover. The handlers only walk the already-visible/active pin pools.
+- Active objective roles are objectiveCreature, objectiveObject, objectiveItemSource, and objectiveArea. Objective-only pins from other quests fade to 30% alpha. A pin containing the hovered quest remains fully visible even when it is a clustered/shared pin with objectives from several quests.
+- Any pin containing a non-objective semantic entry is protected at full alpha so available `!`, completed `?`, item-start, repeatable/event/PvP pickup/turn-in presentation, Flight Masters, rares, and service markers are never dimmed by tracker focus.
+- Full Nodes retain their established 0.85 base opacity and apply the hover multiplier underneath it; the hovered quest keeps the normal validated Full Nodes appearance.
+- Minimap focus reuses the existing pin alpha path and candidate pool. No QuestBeacon-style spatial bucket index or additional persistent map-node index was added.
+- World Map pooled pins clear transient focus alpha on recycle, and current focus is reapplied after normal/full-node visual refreshes so map updates cannot strand stale opacity.
+
 1.01 - STABLE LOCAL-WORK PERFORMANCE HARDENING
 ------------------------------------------------------------
 - Built from accepted 1.0.99. This pass intentionally preserves Questie-Octo's immediate player-facing response: no ZoneBootstrap batch reduction, no slower icon appearance, no added navigation delay, and no QuestBeacon-style minimap spatial bucket tables. The changes remove redundant/global work instead of deferring useful work.

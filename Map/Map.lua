@@ -80,6 +80,8 @@ M.frames={}
 M.framePool={}
 M.activeFrames={}
 M.buildActiveFrames=nil
+M.trackerHoverQuestID=nil
+M.trackerHoverFadeAlpha=0.30
 M.renderedPreparedPlan=nil
 M.syncPreparedPlan=nil
 M.renderedNodeRevision=0
@@ -252,7 +254,7 @@ local function ApplyVisualRole(pin,node)
     if pin.SetFrameLevel and WorldMapButton then
       pin:SetFrameLevel(WorldMapButton:GetFrameLevel()+7+FrameLevelBandForRole(node.role))
     end
-    if QuestieOcto.Visuals then QuestieOcto.Visuals:ApplyPin(pin,node,false,1) end
+    if QuestieOcto.Visuals then QuestieOcto.Visuals:ApplyPin(pin,node,false,pin.trackerHoverAlpha or 1) end
   end
 end
 
@@ -322,6 +324,73 @@ end
 
 local function IsExactRole(role)
   return role=="available" or role=="turnin" or IsPermanentRole(role)
+end
+
+local function IsTrackerHoverObjectiveRole(role)
+  return role=="objectiveCreature" or role=="objectiveObject"
+      or role=="objectiveItemSource" or role=="objectiveArea"
+end
+
+local function TrackerHoverAlphaForPin(pin,questID)
+  questID=tonumber(questID)
+  if not pin or not questID then return 1 end
+
+  -- Item-start areas and any pin containing a non-objective semantic entry are
+  -- protected: pickup/turn-in/service/special markers must never be dimmed just
+  -- because an active objective happens to share their coordinate.
+  if pin.itemStartArea then return 1 end
+
+  local hasObjective=false
+  local hasProtected=false
+  local containsHovered=false
+  for _,entry in pairs(pin.entries or {}) do
+    local node=entry and entry.node
+    if node then
+      if IsTrackerHoverObjectiveRole(node.role) then
+        hasObjective=true
+        if tonumber(node.questID)==questID then containsHovered=true end
+      else
+        hasProtected=true
+      end
+    end
+  end
+
+  -- A clustered/shared objective pin containing the hovered quest remains fully
+  -- visible. Other objective-only pins fade, while any non-objective semantic
+  -- marker remains untouched.
+  if containsHovered or hasProtected or not hasObjective then return 1 end
+  return M.trackerHoverFadeAlpha or 0.30
+end
+
+function M:ApplyTrackerHoverToPin(pin)
+  if not pin then return end
+  local alpha=TrackerHoverAlphaForPin(pin,self.trackerHoverQuestID)
+  if pin.trackerHoverAlpha==alpha then return end
+  pin.trackerHoverAlpha=alpha
+  if QuestieOcto.Visuals then QuestieOcto.Visuals:SetAlpha(pin,alpha) end
+end
+
+function M:RefreshTrackerHoverFocus()
+  local seen={}
+  for _,pin in pairs(self.activeFrames or {}) do
+    if pin and not seen[pin] then
+      seen[pin]=true
+      self:ApplyTrackerHoverToPin(pin)
+    end
+  end
+  for _,pin in pairs(self.buildActiveFrames or {}) do
+    if pin and not seen[pin] then
+      seen[pin]=true
+      self:ApplyTrackerHoverToPin(pin)
+    end
+  end
+end
+
+function M:SetTrackerHoverQuest(questID)
+  questID=tonumber(questID)
+  if self.trackerHoverQuestID==questID then return end
+  self.trackerHoverQuestID=questID
+  self:RefreshTrackerHoverFocus()
 end
 
 local function EntryKey(node)
@@ -928,6 +997,7 @@ local function ResetPooledWorldMapPin(pin)
   pin.y=nil
   pin.offsetX=nil
   pin.offsetY=nil
+  pin.trackerHoverAlpha=nil
   if QuestieOcto.Visuals then QuestieOcto.Visuals:ClearPin(pin,1) end
 end
 
@@ -1027,10 +1097,11 @@ function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
       pin.fullNodeNode=node
     end
     if QuestieOcto.Visuals and QuestieOcto.Visuals.ApplyFullNode then
-      QuestieOcto.Visuals:ApplyFullNode(pin,pin.fullNodeNode,false,1)
+      QuestieOcto.Visuals:ApplyFullNode(pin,pin.fullNodeNode,false,pin.trackerHoverAlpha or 1)
     end
   end
   self:ResizePin(pin)
+  self:ApplyTrackerHoverToPin(pin)
 
   if not pin:IsShown() then pin:Show() end
 
@@ -1065,9 +1136,10 @@ local function RefreshPinVisual(pin)
   end
   pin.fullNodeNode=fullNode
   if fullNode and QuestieOcto.Visuals and QuestieOcto.Visuals.ApplyFullNode then
-    QuestieOcto.Visuals:ApplyFullNode(pin,fullNode,false,1)
+    QuestieOcto.Visuals:ApplyFullNode(pin,fullNode,false,pin.trackerHoverAlpha or 1)
   end
   M:ResizePin(pin)
+  M:ApplyTrackerHoverToPin(pin)
 end
 
 function M:RemoveQuest(questID)
@@ -1239,6 +1311,7 @@ function M:RenderItemStartArea(area,generation,continentZoneMapID)
   pin.iconScaleKey=nil
   pin.sourceKind="area"
   pin.displayName=area.displayName
+  pin.trackerHoverAlpha=1
   pin.clusterCount=area.n
   pin.texture:SetTexture(TextureForNode({role="itemStart",questID=area.questID,event=pin.event,pvp=pin.pvp,repeatable=pin.repeatable}))
   pin.texture:SetDrawLayer("OVERLAY",5)
@@ -1341,6 +1414,7 @@ function M:Finish(generation,doPrune)
   self.activeFrames=nextActive
   self.buildActiveFrames=nil
   ResetVisibleOffsets(generation,self.activeFrames)
+  self:RefreshTrackerHoverFocus()
 
   local active=0
   local visibleAvailable=0
@@ -2207,6 +2281,7 @@ function M:PatchContinentQuests(mapSet,changedQuests)
   end
   self.activeFrames=active
   ResetVisibleOffsets(self.generation,self.activeFrames)
+  self:RefreshTrackerHoverFocus()
 
   local visibleAvailable,visibleItemStart,visibleObjective,visibleTurnin=0,0,0,0
   for _,pin in pairs(self.activeFrames) do

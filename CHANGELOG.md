@@ -1,5 +1,11 @@
 # Questie-Octo Changelog
 
+## 1.02
+- Hovering an active quest in the tracker now focuses that quest's active objective markers on both the World Map and minimap.
+- Other active quests' objective markers fade temporarily while hovered, then return immediately when the cursor leaves the quest.
+- Available/completed quests, item-start markers, special quests, Flight Masters, rares, and service markers are never dimmed; shared clustered pins containing the hovered quest stay fully visible.
+- The focus effect is presentation-only and uses existing visible pins, so it adds no quest/node rebuild, map scan, polling loop, or navigation delay.
+
 ## 1.01
 - Fixed a rare map-cleanup error that could occur when quest state changed after the map cache was already updated.
 - Reduced unnecessary background work when turning in quests and when reputation, profession, or Hardcore eligibility changes.

@@ -8,6 +8,8 @@ MM.plan=nil
 MM.planRevision=nil
 MM.frames={}
 MM.activeFrames={}
+MM.trackerHoverQuestID=nil
+MM.trackerHoverFadeAlpha=0.30
 MM.bindRevision=1
 MM.elapsed=0
 MM.updateInterval=0.05
@@ -409,6 +411,51 @@ local function PlayerPosition(physicalMapID)
   return MM.physicalPlayerX,MM.physicalPlayerY
 end
 
+local function IsTrackerHoverObjectiveRole(role)
+  return role=="objectiveCreature" or role=="objectiveObject"
+      or role=="objectiveItemSource" or role=="objectiveArea"
+end
+
+local function TrackerHoverAlphaForPin(pin,questID)
+  questID=tonumber(questID)
+  if not pin or not questID then return 1 end
+  if pin.itemStartArea then return 1 end
+
+  local hasObjective=false
+  local hasProtected=false
+  local containsHovered=false
+  for _,entry in pairs(pin.entries or {}) do
+    local node=entry and entry.node
+    if node then
+      if IsTrackerHoverObjectiveRole(node.role) then
+        hasObjective=true
+        if tonumber(node.questID)==questID then containsHovered=true end
+      else
+        hasProtected=true
+      end
+    end
+  end
+
+  if containsHovered or hasProtected or not hasObjective then return 1 end
+  return MM.trackerHoverFadeAlpha or 0.30
+end
+
+function MM:ApplyTrackerHoverToPin(pin)
+  if not pin then return end
+  SetTextureAlpha(pin,TrackerHoverAlphaForPin(pin,self.trackerHoverQuestID))
+end
+
+function MM:RefreshTrackerHoverFocus()
+  for _,pin in pairs(self.activeFrames or {}) do self:ApplyTrackerHoverToPin(pin) end
+end
+
+function MM:SetTrackerHoverQuest(questID)
+  questID=tonumber(questID)
+  if self.trackerHoverQuestID==questID then return end
+  self.trackerHoverQuestID=questID
+  self:RefreshTrackerHoverFocus()
+end
+
 local function EntryKey(node)
   return tostring(node.questID)..":"..tostring(node.role)..":"..
     tostring(node.sourceKind)..":"..tostring(node.sourceID)..":"..
@@ -488,6 +535,7 @@ local function AddEntry(pin,node)
   if not pin.entries[key] then pin.entries[key]={node=node} end
   ApplyVisual(pin,node)
   ResizePin(pin)
+  MM:ApplyTrackerHoverToPin(pin)
 end
 
 function MM:GetOrCreate(index)
@@ -545,6 +593,7 @@ RefreshPinVisual=function(pin)
     QuestieOcto.Visuals:ApplyFullNode(pin,fullNode,true,pin.lastAlpha or 1)
   end
   ResizePin(pin)
+  MM:ApplyTrackerHoverToPin(pin)
 end
 
 local function PvPNodeVisible(node)
@@ -690,6 +739,7 @@ local function BindDescriptor(pin,desc,revision,allowItemStart)
     pin.fullNodeNode=fullNode
     ResizePin(pin)
   end
+  MM:ApplyTrackerHoverToPin(pin)
 
   return true
 end
@@ -1017,6 +1067,7 @@ function MM:DiscoverCandidates(px,py,zoom,squareMinimap,width,height)
   self.stats.discoveryScans=(self.stats.discoveryScans or 0)+1
   self.stats.candidateFrames=table.getn(frames)
   self.stats.scannedDescriptors=table.getn(self.plan or {})+table.getn(self.itemStartPlan or {})
+  self:RefreshTrackerHoverFocus()
   self:PositionCandidates(px,py,true)
 end
 

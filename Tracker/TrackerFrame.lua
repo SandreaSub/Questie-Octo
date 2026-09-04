@@ -332,6 +332,22 @@ function T:ScrollBy(delta)
   self:LayoutVisibleRows()
 end
 
+function T:SetTrackerHoverQuest(questID)
+  questID=tonumber(questID)
+  if questID and not (QuestieOcto.QuestLog and QuestieOcto.QuestLog.active and QuestieOcto.QuestLog.active[questID]) then
+    questID=nil
+  end
+  if self.hoverQuestID==questID then return end
+  self.hoverQuestID=questID
+
+  if QuestieOcto.Map and QuestieOcto.Map.SetTrackerHoverQuest then
+    QuestieOcto.Map:SetTrackerHoverQuest(questID)
+  end
+  if QuestieOcto.Minimap and QuestieOcto.Minimap.SetTrackerHoverQuest then
+    QuestieOcto.Minimap:SetTrackerHoverQuest(questID)
+  end
+end
+
 local function EnsureRow(index,parent)
   local row=T.rows[index]
   if row then
@@ -351,6 +367,7 @@ local function EnsureRow(index,parent)
 
   row:SetScript("OnEnter",function()
     if this.questID then
+      T:SetTrackerHoverQuest(this.questID)
       GameTooltip:SetOwner(this,"ANCHOR_LEFT")
       GameTooltip:SetText(this.questTitle or "Quest",1,0.82,0)
       GameTooltip:AddLine("Click to open this quest in the Quest Log.",1,1,1)
@@ -360,6 +377,7 @@ local function EnsureRow(index,parent)
     end
   end)
   row:SetScript("OnLeave",function()
+    T:SetTrackerHoverQuest(nil)
     if GameTooltip then GameTooltip:Hide() end
   end)
   row:RegisterForClicks("LeftButtonUp","RightButtonUp")
@@ -1078,6 +1096,7 @@ function T:CreateFrame()
   frame:SetResizable(false)
   if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
   frame:SetScript("OnMouseWheel",function() T:ScrollBy(arg1) end)
+  frame:SetScript("OnHide",function() T:SetTrackerHoverQuest(nil) end)
   frame:SetScript("OnUpdate",function()
     T.timerElapsed=(T.timerElapsed or 0)+(arg1 or 0)
     if T.timerElapsed>=1 then
