@@ -1,5 +1,11 @@
 # Questie-Octo Changelog
 
+## 1.04
+- Fixed a World Map pin-pool error that could appear after map pins had been recycled and reused for a while.
+- The frame pool now uses Lua 5.0-safe list removal, preventing a stale pool size from returning a nil map pin.
+- Reloading the UI is no longer needed to recover from this specific map-pin reuse failure.
+- Includes the 1.03 battleground empty-map performance correction; normal quest/map response speed is unchanged.
+
 ## 1.03
 - Fixed remaining unnecessary minimap work on battleground/other maps where Questie-Octo has no pins to display.
 - Starter-less compiled maps with no active objectives now publish an empty map plan immediately instead of queueing an empty zone-priority job.

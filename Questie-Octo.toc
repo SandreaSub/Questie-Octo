@@ -2,7 +2,7 @@
 ## Title: Questie-Octo
 ## Notes: Quest helper.
 ## Author: Questie-Octo
-## Version: 1.03
+## Version: 1.04
 ## SavedVariables: QuestieOctoGlobalDB
 ## SavedVariablesPerCharacter: QuestieOctoDB
 

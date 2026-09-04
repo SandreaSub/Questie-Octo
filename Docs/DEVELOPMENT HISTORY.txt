@@ -1,3 +1,10 @@
+1.04 - LUA 5.0 WORLD MAP PIN-POOL SIZE FIX
+------------------------------------------------------------
+- Built on 1.03 after a player reported `Map/Map.lua:1031: attempt to index local pin (a nil value)`. The failure was traced to the World Map frame pool introduced in 1.01, not to quest data or the 1.03 battleground fast path.
+- Lua 5.0 table.insert() updates the table library's stored list size used by table.getn(). The pool previously popped its final element with `pool[count]=nil`, which removes the value but does not decrement that stored size. A later acquisition could therefore see `table.getn(pool)>0` while `pool[count]` was nil and then fail when assigning `pin.frameKey`. Reloading cleared the pool and temporarily masked the problem, matching the player report.
+- AcquireWorldMapPin now pops pooled frames with table.remove(), which keeps Lua 5.0's list-size bookkeeping synchronized. It also drains any stale nil tail entries defensively before allocating a new frame, so an already-corrupted pool cannot reproduce the error.
+- No new polling, OnUpdate, scheduler work, map scan, frame allocation policy, node rebuild, database change, or response delay was added. The 1.03 battleground empty-map optimization and all 1.02 tracker-hover behavior are preserved.
+
 1.03 - BATTLEGROUND EMPTY-MAP IDLE FAST PATH
 ------------------------------------------------------------
 - Built from accepted 1.02 after a player reported that Arathi Basin could still reproduce the battleground FPS problem. Re-audit confirmed Arathi Basin was already covered by the 1.0.98 compiled-candidate fix; the original diagnosis removed the 6,701-quest fallback but did not remove all remaining empty-map minimap work.

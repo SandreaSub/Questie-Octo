@@ -1011,9 +1011,18 @@ local function AcquireWorldMapPin(self,key)
   local pool=self.framePool or {}
   self.framePool=pool
   local count=table.getn(pool)
-  if count>0 then
-    pin=pool[count]
-    pool[count]=nil
+
+  -- Lua 5.0's table.insert/table.remove maintain a separate list size used by
+  -- table.getn(). Popping with pool[count]=nil leaves that size stale, which
+  -- can make a later getn() report a slot whose frame is already nil. Use
+  -- table.remove() for the stack pop, and drain any stale empty tail slots
+  -- left by older pool state before falling back to creating a fresh pin.
+  while count>0 and not pin do
+    pin=table.remove(pool,count)
+    count=count-1
+  end
+
+  if pin then
     self.stats.reused=self.stats.reused+1
   else
     pin=CreateFrame("Button",nil,WorldMapButton)
