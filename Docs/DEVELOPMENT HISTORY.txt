@@ -1,3 +1,12 @@
+1.0.98 - COMPILED EMPTY-MAP CANDIDATE FAST PATH ON 1.0.96
+------------------------------------------------------------
+- Rebuilt from the accepted/live-validated 1.0.96 baseline after the 1.0.97 battleground-performance test was generated from the older 1.0.95 baseline. The full 1.0.96 Objective Color Vision accessibility feature is retained unchanged.
+- Fixed Map/ZoneBootstrap.lua so release builds with the authoritative compiled candidate index treat an absent map bucket as an empty available-quest candidate set instead of falling back to all 6,701 quest IDs.
+- This removes the unnecessary first-visit priority scan on starter-less minimap maps such as Warsong Gulch (3277) and Arathi Basin (3358).
+- Development/source mode retains the old full-database fallback because its candidate index can legitimately still be incomplete while being built.
+- Active quest objective nodes are collected before candidate selection and remain supported. No battleground-specific hiding, minimap polling change, scheduler timing change, database edit, coordinate change, or accessibility-color change was introduced.
+- 1.0.97 remains a consumed test version; 1.0.98 is the consolidated successor built on 1.0.96.
+
 1.0.96 - OBJECTIVE COLOR-VISION ACCESSIBILITY
 ------------------------------------------------
 - Built directly from the accepted/live-validated 1.0.95 baseline. Added one global `objectiveColorVisionMode` presentation setting under Other -> Accessibility with player-facing choices Default, Red-deficient, Green-deficient, Blue-deficient, and High Contrast. Internal values remain default/protan/deutan/tritan/highContrast.

@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.0.98
+- Fixed a large FPS hitch when entering starter-less maps such as Warsong Gulch by no longer rescanning all 6,701 quests when the compiled map index already proves there are no available-quest starters there.
+- Active quest objectives remain supported on those maps; only the unnecessary available-quest fallback scan is skipped.
+- Keeps the validated 1.0.96 Objective Color Vision accessibility modes unchanged.
+
 ## 1.0.96
 - Added **Other → Accessibility → Objective Color Vision** with Default, Red-deficient, Green-deficient, Blue-deficient, and High Contrast modes.
 - Accessibility modes recolor active quest objectives consistently across Full Nodes, Clustered objective colors, and enabled map/minimap glow without changing available, completed, special, rare, or service markers.

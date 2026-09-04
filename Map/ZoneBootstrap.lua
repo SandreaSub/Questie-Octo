@@ -225,10 +225,24 @@ function Z:Start(mapID)
   local ids=nil
   local indexed=false
 
-  if QuestieOcto.MapCandidateIndex and QuestieOcto.MapCandidateIndex:HasMap(mapID) then
-    ids=QuestieOcto.MapCandidateIndex:Get(mapID)
+  local candidateIndex=QuestieOcto.MapCandidateIndex
+  if candidateIndex and candidateIndex.compiled then
+    -- Release builds ship a complete, build-time validated starter/source index.
+    -- An absent map bucket is therefore authoritative: there are zero available
+    -- quest starters to scan on that map. Falling back to every packaged quest
+    -- here made first visits to starter-less maps (notably battlegrounds such as
+    -- Warsong Gulch) enqueue a needless 6,701-quest priority scan. Active quest
+    -- objectives are still added separately above, so an empty starter bucket
+    -- does not suppress legitimate active-objective presentation.
+    ids=candidateIndex:Get(mapID)
+    indexed=true
+  elseif candidateIndex and candidateIndex:HasMap(mapID) then
+    ids=candidateIndex:Get(mapID)
     indexed=true
   else
+    -- Development/source mode can build the candidate index incrementally. Keep
+    -- the old full-scan fallback there because a missing bucket may simply mean
+    -- that indexing has not reached this map yet.
     ids=QuestieOcto.DatabaseAPI:GetQuestIDs()
   end
 
