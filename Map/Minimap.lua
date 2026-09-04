@@ -788,7 +788,11 @@ function MM:HideAll()
   self.stats.candidateFrames=0
 end
 
-function MM:RefreshPlan(mapID)
+local function PlanHasMinimapWork(plan,itemStartPlan)
+  return table.getn(plan or {})>0 or table.getn(itemStartPlan or {})>0
+end
+
+function MM:RefreshPlan(mapID,settleReason)
   mapID=tonumber(mapID) or CurrentMapID()
   if not mapID then
     self.mapID=nil
@@ -798,6 +802,8 @@ function MM:RefreshPlan(mapID)
     self.planRevision=nil
     self.mapWidth=nil
     self.mapHeight=nil
+    self.hasPositionWork=false
+    self.pendingContextSettleReason=nil
     self:HideAll()
     return
   end
@@ -814,6 +820,7 @@ function MM:RefreshPlan(mapID)
     self.mapID=mapID
     self.karazhanContext=newKarazhanContext
     if mapChanged then self.stats.mapChanges=self.stats.mapChanges+1 end
+    self.hasPositionWork=false
     self.bindRevision=(self.bindRevision or 0)+1
     self.lastPlayerX=nil
     self.lastPlayerY=nil
@@ -846,14 +853,39 @@ function MM:RefreshPlan(mapID)
     self.planRevision=nil
     self.mapWidth=nil
     self.mapHeight=nil
+    self.hasPositionWork=false
+    if settleReason then self.pendingContextSettleReason=settleReason end
     self:HideAll()
     if QuestieOcto.ZoneBootstrap then QuestieOcto.ZoneBootstrap:Request(mapID,0.01) end
     return
   end
 
+  local hadPositionWork=self.hasPositionWork and true or false
   self.plan=plan
   self.itemStartPlan=itemStartPlan
   self.planRevision=QuestieOcto.PreparedMap.stateRevision
+  self.hasPositionWork=PlanHasMinimapWork(plan,itemStartPlan)
+
+  -- No descriptors means there is literally nothing for the 20 Hz minimap
+  -- movement path to position. Starter-less battleground maps are the most
+  -- visible example. Stay completely idle here: do not retarget the native
+  -- map context, probe minimap zoom/indoor state, or ask for player position.
+  -- PREPARED_MAP_READY/NODES_READY/zone events wake the normal path immediately
+  -- if a real objective/service marker later becomes available.
+  if not self.hasPositionWork then
+    self.mapWidth=nil
+    self.mapHeight=nil
+    self.pendingContextSettleReason=nil
+    self:HideAll()
+    return
+  end
+
+  local contextReason=settleReason or self.pendingContextSettleReason
+  self.pendingContextSettleReason=nil
+  if contextReason or not hadPositionWork then
+    RestoreCurrentZoneMapContext(contextReason or "MINIMAP_PLAN_ACTIVE")
+    self:RefreshIndoorState(true)
+  end
 
   if karazhan and karazhan:IsSharedArea(mapID) then
     -- Numeric map ID 3457 alone cannot identify Lower vs Upper Karazhan. If
@@ -1162,6 +1194,7 @@ function MM:OnUpdate(elapsed)
     end
   end
 
+  if not self.hasPositionWork then return end
   self:UpdatePositions(false,current)
 end
 
@@ -1202,6 +1235,7 @@ function MM:Start()
       if MM.indoorProbeActive or (MM.indoorProbeIgnoreUntil and now<MM.indoorProbeIgnoreUntil) then
         return
       end
+      if not MM.hasPositionWork then return end
 
       -- Normal zoom changes can be resolved passively and UpdatePositions will
       -- rebuild geometry because lastZoom changed. If the client reports a
@@ -1234,9 +1268,7 @@ function MM:Start()
     end
 
     QuestieOcto.Scheduler:After(0.01,function()
-      RestoreCurrentZoneMapContext(eventName)
-      MM:RefreshIndoorState(true)
-      MM:RefreshPlan()
+      MM:RefreshPlan(nil,eventName)
     end,"minimap-zone-refresh")
   end)
 
@@ -1248,8 +1280,7 @@ function MM:Start()
     self.worldMapHideHooked=true
     local function OnWorldMapHide()
       QuestieOcto.Scheduler:After(0.01,function()
-        RestoreCurrentZoneMapContext("WORLD_MAP_HIDE")
-        MM:RefreshPlan()
+        MM:RefreshPlan(nil,"WORLD_MAP_HIDE")
       end,"minimap-worldmap-close")
     end
 
@@ -1267,9 +1298,7 @@ function MM:Start()
   end
 
   QuestieOcto.Scheduler:After(0.01,function()
-    RestoreCurrentZoneMapContext("START")
-    MM:RefreshIndoorState(true)
-    MM:RefreshPlan()
+    MM:RefreshPlan(nil,"START")
   end,"minimap-start")
 end
 

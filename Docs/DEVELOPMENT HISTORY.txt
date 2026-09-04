@@ -1,3 +1,12 @@
+1.03 - BATTLEGROUND EMPTY-MAP IDLE FAST PATH
+------------------------------------------------------------
+- Built from accepted 1.02 after a player reported that Arathi Basin could still reproduce the battleground FPS problem. Re-audit confirmed Arathi Basin was already covered by the 1.0.98 compiled-candidate fix; the original diagnosis removed the 6,701-quest fallback but did not remove all remaining empty-map minimap work.
+- ZoneBootstrap now publishes an authoritative empty PreparedMap immediately when the compiled candidate bucket is empty and AddActiveNodes also finds no local active objectives. This removes even the empty `zone-priority-scan` scheduler continuation on starter-less maps.
+- Minimap now tracks whether the current prepared plans contain any descriptors. With no descriptors it remains idle: no 20 Hz player-position reads, discovery checks, native map-context retarget, or active indoor/minimap zoom probe is performed. The existing low-frequency physical map identity safety check remains so unusual transitions are still detected.
+- If PREPARED_MAP_READY/NODES_READY/settings later introduce a real marker, the minimap resumes the existing immediate positioning path and settles native context before drawing it. No quest/objective/service marker support is disabled in battlegrounds.
+- Current server/reference battleground coverage checked during the audit: Alterac Valley (server map 30 / area 2597), Warsong Gulch (489 / 3277), Arathi Basin (529 / 3358), Blood Ring (26 / 4014), and Sunnyglade Valley (27 / 5023). The compiled index is not hardcoded to WSG/AB: absent buckets are authoritative for every map/area ID.
+- ZoneBootstrap's 400 indexed-candidate batch remains unchanged so ordinary zone response is not slowed. No spatial minimap index or additional persistent Lua-memory structure was added.
+
 1.02 - TRACKER-HOVER OBJECTIVE FOCUS
 ------------------------------------------------------------
 - Built from accepted 1.01. Hovering an active quest title in Questie-Octo's tracker now sets a transient quest-ID focus shared by World Map and minimap presentation. Leaving the row, hiding the tracker, or changing focus restores normal presentation immediately.

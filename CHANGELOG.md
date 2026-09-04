@@ -1,5 +1,11 @@
 # Questie-Octo Changelog
 
+## 1.03
+- Fixed remaining unnecessary minimap work on battleground/other maps where Questie-Octo has no pins to display.
+- Starter-less compiled maps with no active objectives now publish an empty map plan immediately instead of queueing an empty zone-priority job.
+- Empty minimap plans now stay idle instead of continuously reading player position or probing/retargeting the native minimap context; real quest/objective markers still wake the normal fast path immediately.
+- This is a performance-only correction: normal zone quest loading speed and the existing 400-candidate fast ZoneBootstrap behavior are unchanged.
+
 ## 1.02
 - Hovering an active quest in the tracker now focuses that quest's active objective markers on both the World Map and minimap.
 - Other active quests' objective markers fade temporarily while hovered, then return immediately when the cursor leaves the quest.

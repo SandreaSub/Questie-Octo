@@ -250,6 +250,24 @@ function Z:Start(mapID)
   local nodes={}
   AddActiveNodes(nodes,mapID)
 
+  -- Compiled starter-less maps are a common battleground case. If there are
+  -- also no active objective nodes for this map, publish the authoritative
+  -- empty plan immediately instead of sending an empty continuation through
+  -- the scheduler. This preserves the 1.0.98 zero-candidate semantics while
+  -- removing the last zone-priority job from maps such as Warsong Gulch and
+  -- Arathi Basin when the player has nothing Questie-Octo can display there.
+  if indexed and table.getn(ids or {})==0 and table.getn(nodes)==0 then
+    self.stats.nodes=0
+    local plan={}
+    local worldItemStartPlan={}
+    QuestieOcto.PreparedMap.stats.currentMap=mapID
+    QuestieOcto.PreparedMap:SetPreparedMap(mapID,plan,worldItemStartPlan)
+    self.running=false
+    self.ready=true
+    QuestieOcto:SendMessage("ZONE_BOOTSTRAP_READY",mapID)
+    return
+  end
+
   local pos=1
   local function step()
     if generation~=Z.generation then
