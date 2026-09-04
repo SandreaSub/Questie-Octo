@@ -13,6 +13,8 @@ A.generation=0
 A.stats={}
 A.reputationCache={}
 A.hardcoreCache=nil
+A.dependencyIndex=A.dependencyIndex or {skill={},reputation={},hardcore={}}
+A.pendingDependencyIndex=nil
 
 local function NewStats()
   return {
@@ -231,6 +233,14 @@ local function HasOtherTimedQuest(questID)
   return false
 end
 
+local function IndexQuestDependencies(self,questID,raw)
+  local index=self.pendingDependencyIndex or self.dependencyIndex
+  if not index or not raw then return end
+  if raw["skill"] then index.skill[questID]=true end
+  if raw["repMinFaction"] or raw["repMaxFaction"] then index.reputation[questID]=true end
+  if raw["hardcore"] then index.hardcore[questID]=true end
+end
+
 local function Track(self,name,enabled)
   if not enabled then return end
   local stats=self.scanStats or self.stats
@@ -241,6 +251,7 @@ function A:EvaluateQuest(questID,trackStats)
   questID=tonumber(questID)
   local raw=questID and QuestieOcto.DatabaseAPI:GetQuestRaw(questID) or nil
   if not raw then return false,"noModel" end
+  IndexQuestDependencies(self,questID,raw)
 
   if raw["disabled"] then
     Track(self,"disabled",trackStats)
@@ -598,6 +609,7 @@ function A:Recalculate(fastRefresh)
   -- the live table before the async scan completed, which made map pins blink
   -- off/on whenever a filtering option changed.
   self.pendingAvailable={}
+  self.pendingDependencyIndex={skill={},reputation={},hardcore={}}
   self.learnedCompletionFlag=false
   self.queue=QuestieOcto.DatabaseAPI:GetQuestIDs()
   self.pos=1
@@ -610,6 +622,7 @@ function A:Recalculate(fastRefresh)
     if not QuestieOcto.Completion.ready then
       A.running=false
       A.ready=false
+      A.pendingDependencyIndex=nil
       return
     end
 
@@ -649,8 +662,10 @@ function A:Recalculate(fastRefresh)
     end
 
     A.available=replacement
+    A.dependencyIndex=A.pendingDependencyIndex or A.dependencyIndex
     A.stats=A.scanStats or A.stats
     A.pendingAvailable=nil
+    A.pendingDependencyIndex=nil
     A.scanStats=nil
     A.running=false
     A.ready=true
@@ -694,6 +709,51 @@ function A:RemoveQuest(questID)
   end
 end
 
+function A:RecalculateDependency(kind)
+  local set=self.dependencyIndex and self.dependencyIndex[kind] or nil
+  if not self.ready or self.running or not set then
+    self:Schedule(true,0.01)
+    return
+  end
+
+  local changed={}
+  local learnedBefore=self.learnedCompletionFlag and true or false
+  self.learnedCompletionFlag=false
+  local scanned=0
+
+  for questID in pairs(set) do
+    local was=self.available[questID] and true or false
+    local now=self:EvaluateQuest(questID,false) and true or false
+    if now~=was then
+      changed[questID]=true
+      if now then
+        self.available[questID]=true
+        self.stats.available=(self.stats.available or 0)+1
+      else
+        self.available[questID]=nil
+        self.stats.available=math.max(0,(self.stats.available or 0)-1)
+      end
+    end
+    scanned=scanned+1
+  end
+
+  self.stats.dependencyScans=(self.stats.dependencyScans or 0)+1
+  self.stats.lastDependencyKind=kind
+  self.stats.lastDependencyCount=scanned
+
+  if next(changed) then QuestieOcto:SendMessage("AVAILABLE_QUESTS_READY",changed) end
+
+  local learned=self.learnedCompletionFlag and true or false
+  self.learnedCompletionFlag=learnedBefore
+  if learned then self:Schedule(true,0.01) end
+end
+
+function A:ScheduleDependency(kind,delay)
+  QuestieOcto.Scheduler:After(delay or 0.01,function()
+    A:RecalculateDependency(kind)
+  end,"available-dependency-"..tostring(kind))
+end
+
 function A:FastRefresh()
   self:Recalculate(true)
 end
@@ -722,13 +782,21 @@ stateFrame:RegisterEvent("SKILL_LINES_CHANGED")
 stateFrame:RegisterEvent("UPDATE_FACTION")
 stateFrame:RegisterEvent("SPELLS_CHANGED")
 stateFrame:SetScript("OnEvent",function()
-  if event=="UPDATE_FACTION" then A:ClearReputationCache() end
-  if event=="SPELLS_CHANGED" then A:ClearChallengeCache() end
-
   if event=="PLAYER_LEVEL_UP" then
+    -- Level changes can affect a large fraction of the quest database, so keep
+    -- the existing immediate full refresh and settled follow-up.
     A:FastRefresh()
     QuestieOcto.Scheduler:After(0.30,function() A:FastRefresh() end,"questie-level-stable-refresh")
-  else
-    A:Schedule(true,0.05)
+    return
+  end
+
+  if event=="UPDATE_FACTION" then
+    A:ClearReputationCache()
+    A:ScheduleDependency("reputation",0.01)
+  elseif event=="SKILL_LINES_CHANGED" then
+    A:ScheduleDependency("skill",0.01)
+  elseif event=="SPELLS_CHANGED" then
+    A:ClearChallengeCache()
+    A:ScheduleDependency("hardcore",0.01)
   end
 end)

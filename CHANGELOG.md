@@ -1,5 +1,15 @@
 # Questie-Octo Changelog
 
+## 1.01
+- Fixed a rare map-cleanup error that could occur when quest state changed after the map cache was already updated.
+- Reduced unnecessary background work when turning in quests and when reputation, profession, or Hardcore eligibility changes.
+- Improved long-session World Map memory behavior by reusing map pins instead of retaining old zone pins and their quest data.
+- Reduced map, continent, node, and tooltip refresh work so local quest changes stay local while keeping Questie-Octo's current fast in-game response.
+
+## 1.0.99
+- Improved quest accept, abandon, and turn-in map cleanup so removing one quest updates only the maps that quest actually uses instead of walking every prepared map.
+- Duplicate removal events for an already-cleared quest no longer trigger another prepared-map revision pass.
+
 ## 1.0.98
 - Fixed a large FPS hitch when entering starter-less maps such as Warsong Gulch by no longer rescanning all 6,701 quests when the compiled map index already proves there are no available-quest starters there.
 - Active quest objectives remain supported on those maps; only the unnecessary available-quest fallback scan is skipped.

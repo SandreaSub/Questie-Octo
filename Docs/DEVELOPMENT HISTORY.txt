@@ -1,3 +1,26 @@
+1.01 - STABLE LOCAL-WORK PERFORMANCE HARDENING
+------------------------------------------------------------
+- Built from accepted 1.0.99. This pass intentionally preserves Questie-Octo's immediate player-facing response: no ZoneBootstrap batch reduction, no slower icon appearance, no added navigation delay, and no QuestBeacon-style minimap spatial bucket tables. The changes remove redundant/global work instead of deferring useful work.
+- Fixed PreparedMap's 1.0.99 startup/race fallback helper referencing an undefined `self`. Once Nodes is authoritative, a missing quest -> map reverse entry is now an authoritative empty set; before Nodes is ready, the historical full-cache fallback remains available.
+- Turn-in completion now replaces the existing keyed availability timer with the fast refresh instead of scheduling a second independent full 6,701-quest availability generation.
+- World Map pin frames now use a generic reuse pool. Leaving a map context clears old semantic/node references and reuses those frame objects for later maps, so browsing many zones does not keep one keyed pin set per historical map.
+- Incremental continent updates now consume the NODES_CHANGED affected-map set and visit only changed maps on the displayed continent. Historical frame-cache scans are bounded to the current context by the new frame pool.
+- Nodes now keeps a reverse quest -> canonical-node index and stores the global node set by nodeID. A changed quest can remove its exact canonical nodes directly, including coordinate-less tooltip nodes, and each affected map is filtered once regardless of how many changed quests share it.
+- PreparedMap incremental patches now remove all changed quests from a descriptor in one pass instead of descriptor x changed-quest loops. World item-start plans are patched from changed quest nodes instead of being rebuilt from every item-start node on the map.
+- Availability builds a small dependency index during the normal full scan. UPDATE_FACTION reevaluates only reputation-gated quests, SKILL_LINES_CHANGED only skill-gated quests, and SPELLS_CHANGED only Hardcore-gated quests. Current compiled data contains 293 reputation-dependent, 200 skill-dependent, and 8 Hardcore-dependent quests versus 6,701 total. PLAYER_LEVEL_UP keeps the established full fast refresh because level changes legitimately affect a broad quest set.
+- Tooltip hover indexing now keeps quest-local reverse bucket ownership. NODES_CHANGED removes/rebuilds only changed quests' creature/object/item hover entries; full index rebuilds remain for complete NODES_READY publications and presentation-setting changes.
+- Scheduler delayed work reuses one due-key scratch array instead of allocating a new table every frame. Keyed delayed callbacks now carry monotonic tokens into the FIFO so rescheduling a key also cancels an obsolete copy that already reached the queue.
+- Runtime database content, quest data, ZoneBootstrap's 400 indexed-candidate responsiveness, minimap discovery architecture, visual behavior, accessibility colors, and existing gameplay defaults are unchanged.
+
+1.0.99 - MAP-LOCAL PREPARED QUEST REMOVAL
+------------------------------------------------------------
+- PreparedMap.RemoveQuest now reuses Nodes.questMaps, the existing reverse quest -> map index, so an accepted/abandoned/turned-in quest only scans prepared descriptors on maps that actually contain that quest.
+- The historical all-prepared-map descriptor sweep remains only as a startup/race correctness fallback when the reverse node index is unavailable.
+- Removed the second all-cache descriptor recount: descriptor accounting now subtracts only coordinate slots actually dropped from affected maps.
+- Duplicate compatibility removal events become a no-op once no prepared quest metadata remains, avoiding another global state-revision pass.
+- No additional persistent reverse/spatial index was added, preserving the current Lua-memory profile.
+- ZoneBootstrap batching and minimap spatial bucketing were deliberately left unchanged; current fast zone response and current minimap memory behavior remain intact.
+
 1.0.98 - COMPILED EMPTY-MAP CANDIDATE FAST PATH ON 1.0.96
 ------------------------------------------------------------
 - Rebuilt from the accepted/live-validated 1.0.96 baseline after the 1.0.97 battleground-performance test was generated from the older 1.0.95 baseline. The full 1.0.96 Objective Color Vision accessibility feature is retained unchanged.

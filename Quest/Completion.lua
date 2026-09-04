@@ -269,9 +269,12 @@ function C:OnQuestTurnedIn(questID)
   self.source="QUEST_TURNED_IN"
   QuestieOcto:SendMessage("COMPLETION_READY")
 
-  QuestieOcto.Scheduler:After(0.01,function()
-    if QuestieOcto.AvailableQuests then QuestieOcto.AvailableQuests:FastRefresh() end
-  end,"questie-turnin-fast-refresh")
+  -- COMPLETION_READY already schedules availability through the keyed
+  -- available-recalc timer. Replace that delayed normal refresh with the fast
+  -- one instead of launching a second full 6,701-quest generation.
+  if QuestieOcto.AvailableQuests and QuestieOcto.AvailableQuests.Schedule then
+    QuestieOcto.AvailableQuests:Schedule(true,0.01)
+  end
 end
 
 function C:RefreshFromQuestieAPI()

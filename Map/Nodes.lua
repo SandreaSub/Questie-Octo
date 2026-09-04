@@ -7,6 +7,7 @@ N.generation=0
 N.nodes={}
 N.byMap={}
 N.questMaps={}
+N.questNodes={}
 N.nodeSequence=0
 N.stateRevision=0
 N.stats={
@@ -79,6 +80,10 @@ local function CurrentQuestMaps()
   return N.buildQuestMaps or N.questMaps
 end
 
+local function CurrentQuestNodes()
+  return N.buildQuestNodes or N.questNodes
+end
+
 local function ApplyIconScaleKey(node)
   return node
 end
@@ -96,7 +101,18 @@ local function AddNode(node)
   CurrentStats().total=CurrentStats().total+1
   N.nodeSequence=(N.nodeSequence or 0)+1
   node.nodeID=N.nodeSequence
-  table.insert(CurrentNodes(),node)
+  -- Global canonical nodes are keyed by nodeID rather than kept as a compact
+  -- array. Incremental quest removal can therefore delete known node IDs
+  -- directly without copying the entire global node table. All consumers use
+  -- pairs(), so ordering is intentionally provided by byMap where required.
+  CurrentNodes()[node.nodeID]=node
+
+  local questID=tonumber(node.questID)
+  if questID and questID>0 then
+    local questNodes=CurrentQuestNodes()
+    questNodes[questID]=questNodes[questID] or {}
+    table.insert(questNodes[questID],node)
+  end
 
   local coords=node.coords
   if coords then
@@ -587,34 +603,32 @@ end
 local function RemoveChangedQuestNodes(changed)
   local affectedMaps={}
 
-  -- Update global node/stat accounting once per canonical node. A canonical
-  -- source can belong to more than one map, so decrementing while filtering
-  -- per-map arrays would count the same node more than once.
-  local keptGlobal={}
-  for _,node in pairs(N.nodes or {}) do
-    if changed[tonumber(node.questID)] then
-      DecrementNodeStats(node)
-    else
-      table.insert(keptGlobal,node)
-    end
-  end
-  N.nodes=keptGlobal
-
-  -- Remove only changed quests from map indexes. Keep the old map IDs in the
-  -- affected set so a quest that disappears entirely can still remove its
-  -- prepared/map presentation from those zones.
+  -- questNodes is the reverse canonical-node ownership index. Remove each
+  -- changed quest's exact global nodes directly, including coordinate-less
+  -- tooltip/objective nodes, instead of copying/scanning every canonical node.
   for questID in pairs(changed) do
-    for mapID in pairs(N.questMaps[questID] or {}) do
-      affectedMaps[mapID]=true
-      local kept={}
-      for _,node in pairs(N.byMap[mapID] or {}) do
-        if tonumber(node.questID)~=questID then table.insert(kept,node) end
+    for _,node in pairs(N.questNodes[questID] or {}) do
+      if N.nodes[node.nodeID] then
+        N.nodes[node.nodeID]=nil
+        DecrementNodeStats(node)
       end
-      N.byMap[mapID]=kept
     end
-    N.questMaps[questID]=nil
+    N.questNodes[questID]=nil
+    for mapID in pairs(N.questMaps[questID] or {}) do affectedMaps[mapID]=true end
   end
 
+  -- Filter each affected map exactly once no matter how many changed quests
+  -- share it. The previous implementation rebuilt the same map array once per
+  -- changed quest.
+  for mapID in pairs(affectedMaps) do
+    local kept={}
+    for _,node in pairs(N.byMap[mapID] or {}) do
+      if not changed[tonumber(node.questID)] then table.insert(kept,node) end
+    end
+    N.byMap[mapID]=kept
+  end
+
+  for questID in pairs(changed) do N.questMaps[questID]=nil end
   return affectedMaps
 end
 
@@ -630,6 +644,11 @@ local function SortAffectedMaps(affectedMaps)
       end)
     end
   end
+end
+
+function N:GetQuestNodes(questID)
+  questID=tonumber(questID)
+  return questID and self.questNodes[questID] or nil
 end
 
 function N:RefreshQuests(changedQuests)
@@ -708,9 +727,11 @@ function N:Rebuild()
   local hadReady=self.ready and true or false
   if not hadReady then self.ready=false end
   self.running=true
+  self.nodeSequence=0
   self.buildNodes={}
   self.buildByMap={}
   self.buildQuestMaps={}
+  self.buildQuestNodes={}
   self.buildStats=NewStats()
 
   -- Capture the input snapshots. A newer publication triggers another rebuild
@@ -726,10 +747,12 @@ function N:Rebuild()
     N.nodes=N.buildNodes or {}
     N.byMap=N.buildByMap or {}
     N.questMaps=N.buildQuestMaps or {}
+    N.questNodes=N.buildQuestNodes or {}
     N.stats=N.buildStats or N.stats
     N.buildNodes=nil
     N.buildByMap=nil
     N.buildQuestMaps=nil
+    N.buildQuestNodes=nil
     N.buildStats=nil
     N.running=false
     N.ready=true

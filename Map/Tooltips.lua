@@ -6,8 +6,11 @@ local T = QuestieOcto.Tooltips
 -- same separation used by pfQuest: map preparation establishes which quest
 -- relationships exist, while GameTooltip hover only performs indexed lookups.
 T.hoverIndex=T.hoverIndex or { unitByName={}, objectByID={}, itemByID={} }
+T.hoverQuestBuckets=T.hoverQuestBuckets or {}
 T.hoverIndexReady=T.hoverIndexReady or false
 T.hoverIndexPending=T.hoverIndexPending or false
+T.hoverIndexNeedsFull=T.hoverIndexNeedsFull or false
+T.hoverPendingChanged=T.hoverPendingChanged or {}
 T.worldTooltipState=T.worldTooltipState or { signature=nil, afterLines=0 }
 T.initialized=T.initialized or false
 
@@ -773,86 +776,165 @@ local function AppendIndexed(index,key,node)
   table.insert(index[key],node)
 end
 
+local function AppendQuestIndexed(index,questBuckets,kind,key,node)
+  if key==nil or not node then return end
+  AppendIndexed(index[kind],key,node)
+  local questID=tonumber(node.questID)
+  if not questID or questID<=0 then return end
+  questBuckets[questID]=questBuckets[questID] or {}
+  local bucketKey=tostring(kind)..":"..tostring(key)
+  if not questBuckets[questID][bucketKey] then
+    questBuckets[questID][bucketKey]={kind=kind,key=key}
+  end
+end
+
 local function UnitNameKey(name)
   name=tostring(name or "")
   if name=="" then return nil end
   return string.lower(name)
 end
 
-function T:RebuildHoverIndex()
-  local nextIndex={ unitByName={}, objectByID={}, itemByID={} }
-  local showItemStarts=Settings():Get("showItemStartQuests") and true or false
+local function IndexHoverNode(index,questBuckets,node,showItemStarts)
+  local questID=tonumber(node and node.questID)
+  if not questID or questID<=0 or not IsQuestHoverRole(node.role)
+     or (node.role=="itemStart" and not showItemStarts) then return end
 
-  for _,node in pairs((QuestieOcto.Nodes and QuestieOcto.Nodes.nodes) or {}) do
-    local questID=tonumber(node.questID)
-    if questID and questID>0 and IsQuestHoverRole(node.role)
-       and (node.role~="itemStart" or showItemStarts) then
-      if node.sourceKind=="creature" and node.sourceName then
-        AppendIndexed(nextIndex.unitByName,UnitNameKey(node.sourceName),node)
-      elseif node.sourceKind=="gameObject" and tonumber(node.sourceID) then
-        AppendIndexed(nextIndex.objectByID,tonumber(node.sourceID),node)
+  if node.sourceKind=="creature" and node.sourceName then
+    AppendQuestIndexed(index,questBuckets,"unitByName",UnitNameKey(node.sourceName),node)
+  elseif node.sourceKind=="gameObject" and tonumber(node.sourceID) then
+    AppendQuestIndexed(index,questBuckets,"objectByID",tonumber(node.sourceID),node)
+  end
+end
+
+local function IndexQuestItemEntries(index,questBuckets,questID,showItemStarts)
+  questID=tonumber(questID)
+  if not questID then return end
+
+  local resolved=QuestieOcto.Objectives and QuestieOcto.Objectives.byQuest
+    and QuestieOcto.Objectives.byQuest[questID] or nil
+  if resolved and QuestieOcto.QuestLog.active[questID] then
+    for _,item in pairs(resolved.item or {}) do
+      local itemID=tonumber(item.itemID)
+      if itemID then
+        AppendQuestIndexed(index,questBuckets,"itemByID",itemID,{
+          questID=questID,
+          role="objectiveItemSource",
+          itemID=itemID,
+          itemName=item.name,
+          objectiveIndex=item.objectiveIndex,
+          objectiveText=item.objectiveText,
+          current=item.current,
+          required=item.required,
+          objectiveComplete=item.complete and true or false,
+        })
       end
-
     end
   end
 
-  -- Item hover should not depend on whether a map source survived source-rate
-  -- filtering. Index the active item objective itself, then let creature/object
-  -- hover use the source nodes above. This also avoids one item tooltip entry
-  -- per possible drop source.
-  for questID,resolved in pairs((QuestieOcto.Objectives and QuestieOcto.Objectives.byQuest) or {}) do
-    if QuestieOcto.QuestLog.active[questID] then
-      for _,item in pairs(resolved.item or {}) do
+  if showItemStarts then
+    local starter=QuestieOcto.ItemStarts and QuestieOcto.ItemStarts.byQuest
+      and QuestieOcto.ItemStarts.byQuest[questID] or nil
+    if starter and QuestieOcto.AvailableQuests and QuestieOcto.AvailableQuests.available[questID] then
+      for _,item in pairs(starter.items or {}) do
         local itemID=tonumber(item.itemID)
         if itemID then
-          AppendIndexed(nextIndex.itemByID,itemID,{
+          AppendQuestIndexed(index,questBuckets,"itemByID",itemID,{
             questID=questID,
-            role="objectiveItemSource",
+            role="itemStart",
             itemID=itemID,
             itemName=item.name,
-            objectiveIndex=item.objectiveIndex,
-            objectiveText=item.objectiveText,
-            current=item.current,
-            required=item.required,
-            objectiveComplete=item.complete and true or false,
           })
         end
       end
     end
   end
+end
 
-  -- Available item-start quests likewise belong on the starter item's own
-  -- tooltip even if the item came from a source outside our current map data.
-  -- The master Show Item-Start Quests toggle applies to world/item hover too,
-  -- so disabling item-start presentation does not leave tooltip-only guidance.
-  if showItemStarts then
-    for questID,resolved in pairs((QuestieOcto.ItemStarts and QuestieOcto.ItemStarts.byQuest) or {}) do
-      if QuestieOcto.AvailableQuests and QuestieOcto.AvailableQuests.available[questID] then
-        for _,item in pairs(resolved.items or {}) do
-          local itemID=tonumber(item.itemID)
-          if itemID then
-            AppendIndexed(nextIndex.itemByID,itemID,{
-              questID=questID,
-              role="itemStart",
-              itemID=itemID,
-              itemName=item.name,
-            })
-          end
-        end
+local function RemoveQuestHoverEntries(self,questID)
+  questID=tonumber(questID)
+  local refs=questID and self.hoverQuestBuckets[questID] or nil
+  if not refs then return end
+
+  for _,ref in pairs(refs) do
+    local source=self.hoverIndex[ref.kind]
+    local bucket=source and source[ref.key] or nil
+    if bucket then
+      local kept={}
+      for _,node in pairs(bucket) do
+        if tonumber(node.questID)~=questID then table.insert(kept,node) end
       end
+      if table.getn(kept)>0 then source[ref.key]=kept else source[ref.key]=nil end
+    end
+  end
+  self.hoverQuestBuckets[questID]=nil
+end
+
+function T:RebuildHoverIndex()
+  local nextIndex={ unitByName={}, objectByID={}, itemByID={} }
+  local nextQuestBuckets={}
+  local showItemStarts=Settings():Get("showItemStartQuests") and true or false
+
+  for _,node in pairs((QuestieOcto.Nodes and QuestieOcto.Nodes.nodes) or {}) do
+    IndexHoverNode(nextIndex,nextQuestBuckets,node,showItemStarts)
+  end
+
+  for questID in pairs((QuestieOcto.QuestLog and QuestieOcto.QuestLog.active) or {}) do
+    IndexQuestItemEntries(nextIndex,nextQuestBuckets,questID,showItemStarts)
+  end
+  if showItemStarts then
+    for questID in pairs((QuestieOcto.ItemStarts and QuestieOcto.ItemStarts.byQuest) or {}) do
+      IndexQuestItemEntries(nextIndex,nextQuestBuckets,questID,showItemStarts)
     end
   end
 
   self.hoverIndex=nextIndex
+  self.hoverQuestBuckets=nextQuestBuckets
+  self.hoverIndexReady=true
+  self.hoverIndexPending=false
+  self.hoverIndexNeedsFull=false
+  self.hoverPendingChanged={}
+end
+
+function T:PatchHoverIndex(changedQuests)
+  if not self.hoverIndexReady or not QuestieOcto.Nodes or not QuestieOcto.Nodes.ready then
+    self:RebuildHoverIndex()
+    return
+  end
+
+  local showItemStarts=Settings():Get("showItemStartQuests") and true or false
+  for rawQuestID in pairs(changedQuests or {}) do
+    local questID=tonumber(rawQuestID)
+    if questID and questID>0 then
+      RemoveQuestHoverEntries(self,questID)
+      for _,node in pairs(QuestieOcto.Nodes:GetQuestNodes(questID) or {}) do
+        IndexHoverNode(self.hoverIndex,self.hoverQuestBuckets,node,showItemStarts)
+      end
+      IndexQuestItemEntries(self.hoverIndex,self.hoverQuestBuckets,questID,showItemStarts)
+    end
+  end
+
   self.hoverIndexReady=true
   self.hoverIndexPending=false
 end
 
-function T:ScheduleHoverIndex()
+function T:ScheduleHoverIndex(mapSet,changedQuests)
+  if changedQuests and next(changedQuests) and self.hoverIndexReady then
+    for questID in pairs(changedQuests) do self.hoverPendingChanged[questID]=true end
+  else
+    self.hoverIndexNeedsFull=true
+  end
+
   if self.hoverIndexPending then return end
   self.hoverIndexPending=true
   QuestieOcto.Scheduler:After(0.05,function()
-    T:RebuildHoverIndex()
+    if T.hoverIndexNeedsFull then
+      T:RebuildHoverIndex()
+      return
+    end
+
+    local changed=T.hoverPendingChanged
+    T.hoverPendingChanged={}
+    T:PatchHoverIndex(changed)
   end,"tooltip-hover-index")
 end
 

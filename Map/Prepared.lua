@@ -308,48 +308,114 @@ local function RemoveQuestFromDescriptor(desc,questID)
   return false,0
 end
 
+
+local function RemoveChangedFromDescriptor(desc,changed)
+  if not desc then return false,0 end
+
+  if desc.type=="itemStartArea" and desc.area then
+    if changed[tonumber(desc.area.questID)] then return true,1 end
+    return false,0
+  end
+
+  if desc.type=="nodeSlot" then
+    local kept={}
+    local removed=0
+    for _,entry in pairs(desc.entries or {}) do
+      if entry.node and changed[tonumber(entry.node.questID)] then
+        removed=removed+1
+      else
+        table.insert(kept,entry)
+      end
+    end
+    desc.entries=kept
+    return table.getn(kept)==0,removed
+  end
+
+  if desc.type=="node" and desc.node and changed[tonumber(desc.node.questID)] then
+    return true,1
+  end
+
+  return false,0
+end
+
+local function QuestRemovalMapSet(self,questID)
+  -- Nodes already maintains the authoritative reverse quest -> map index used
+  -- by incremental map patches. Reuse it here instead of introducing another
+  -- persistent PreparedMap index/table just for immediate quest removals.
+  local nodes=QuestieOcto.Nodes
+  if nodes and nodes.ready and nodes.questMaps then
+    local indexed=nodes.questMaps[questID]
+    if indexed and next(indexed) then return indexed,true end
+
+    -- Once Nodes is authoritative, an absent reverse entry is an authoritative
+    -- empty set. This is also the normal duplicate-event case after the first
+    -- removal already cleared the quest. Do not fall back to a global sweep.
+    return {},true
+  end
+
+  -- Startup/race compatibility: before semantic Nodes are authoritative, keep
+  -- the historical full-cache sweep rather than risking stale prepared pins.
+  return self.cache,false
+end
+
 function P:RemoveQuest(questID)
   questID=tonumber(questID)
   if not questID then return 0 end
+
+  local mapSet,indexed=QuestRemovalMapSet(self,questID)
+  local removed=0
+  local droppedDescriptors=0
+
+  for rawMapID in pairs(mapSet or {}) do
+    local mapID=tonumber(rawMapID)
+    local plan=mapID and self.cache[mapID] or nil
+    if plan then
+      local filtered={}
+      local before=table.getn(plan)
+      for _,desc in pairs(plan) do
+        local drop,count=RemoveQuestFromDescriptor(desc,questID)
+        removed=removed+(count or 0)
+        if not drop then table.insert(filtered,desc) end
+      end
+      self.cache[mapID]=filtered
+      droppedDescriptors=droppedDescriptors+before-table.getn(filtered)
+    end
+
+    local worldPlan=mapID and self.worldItemStartCache[mapID] or nil
+    if worldPlan then
+      local filtered={}
+      for _,desc in pairs(worldPlan) do
+        local drop,count=RemoveQuestFromDescriptor(desc,questID)
+        removed=removed+(count or 0)
+        if not drop then table.insert(filtered,desc) end
+      end
+      self.worldItemStartCache[mapID]=filtered
+    end
+  end
+
+  -- A second compatibility event for the same turn-in can arrive after the
+  -- immediate removal. Once the quest metadata is already gone, return without
+  -- another global revision bump/recount. The first removal did the real work.
+  if removed==0 then return 0 end
 
   self.stateRevision=self.stateRevision+1
   self.stats.stateRevision=self.stateRevision
   self.stats.revisionBumps=(self.stats.revisionBumps or 0)+1
   self.stats.currentReady=false
-  self.lastRevisionReason="quest-remove"
+  self.lastRevisionReason=indexed and "quest-remove-local" or "quest-remove-fallback"
 
-  local removed=0
-  for mapID,plan in pairs(self.cache) do
-    local filtered={}
-    for _,desc in pairs(plan or {}) do
-      local drop,count=RemoveQuestFromDescriptor(desc,questID)
-      removed=removed+(count or 0)
-      if not drop then table.insert(filtered,desc) end
-    end
-
-    self.cache[mapID]=filtered
-    if self.readyMaps[mapID] then
-      self.cacheRevision[mapID]=self.stateRevision
-    end
+  -- stateRevision is global cache validity metadata, so ready maps still need
+  -- their revision stamp advanced. This is O(number of prepared maps) but does
+  -- not inspect or allocate their descriptor plans.
+  for mapID in pairs(self.readyMaps or {}) do
+    self.cacheRevision[mapID]=self.stateRevision
+    self.worldItemStartRevision[mapID]=self.stateRevision
   end
 
-  for mapID,plan in pairs(self.worldItemStartCache or {}) do
-    local filtered={}
-    for _,desc in pairs(plan or {}) do
-      local drop,count=RemoveQuestFromDescriptor(desc,questID)
-      removed=removed+(count or 0)
-      if not drop then table.insert(filtered,desc) end
-    end
-    self.worldItemStartCache[mapID]=filtered
-    if self.readyMaps[mapID] then self.worldItemStartRevision[mapID]=self.stateRevision end
-  end
-
-  -- `descriptors` counts coordinate slots, not quest references, in the new
-  -- pfQuest-style prepared representation. Recalculate cheaply after an
-  -- immediate quest removal rather than subtracting removed metadata entries.
-  local descriptorCount=0
-  for _,plan in pairs(self.cache) do descriptorCount=descriptorCount+table.getn(plan or {}) end
-  self.stats.descriptors=descriptorCount
+  -- `descriptors` counts coordinate slots in the normal prepared cache. We know
+  -- exactly how many slots disappeared from the affected maps, so avoid the old
+  -- second full-cache recount.
+  self.stats.descriptors=math.max(0,(self.stats.descriptors or 0)-droppedDescriptors)
   if self.stats.currentMap and self.readyMaps[self.stats.currentMap] then
     self.stats.currentReady=true
   end
@@ -579,27 +645,41 @@ function P:PatchMaps(mapSet,changedQuests)
         local byKey={}
         for _,desc in pairs(existing) do
           local candidate=ClonePreparedDescriptor(desc)
-          local drop=false
-          for questID in pairs(changed) do
-            local remove=RemoveQuestFromDescriptor(candidate,questID)
-            if remove then drop=true end
-          end
+          local drop=RemoveChangedFromDescriptor(candidate,changed)
           if not drop then
             table.insert(plan,candidate)
             byKey[DescriptorKeyValue(candidate)]=candidate
           end
         end
 
+        -- Scan the affected map's canonical nodes once, regardless of how many
+        -- quests changed. The old descriptor loop multiplied every descriptor
+        -- by every changed quest.
         local changedNodes={}
         for _,node in pairs(QuestieOcto.Nodes:GetMapNodes(mapID) or {}) do
           if changed[tonumber(node.questID)] then table.insert(changedNodes,node) end
         end
         local delta=P:BuildPlanFromNodes(mapID,changedNodes) or {}
         for _,desc in pairs(delta) do MergePreparedDescriptor(byKey,plan,desc) end
-
         table.sort(plan,function(a,b) return DescriptorKeyValue(a)<DescriptorKeyValue(b) end)
-        local allNodes=QuestieOcto.Nodes:GetMapNodes(mapID)
-        local worldItemStartPlan=P:BuildWorldItemStartPlanFromNodes(mapID,allNodes) or {}
+
+        -- Item-start geographic areas are quest-specific. Patch only the
+        -- changed quests here as well instead of rebuilding every item-start
+        -- area on the map for a local availability/objective change.
+        local worldItemStartPlan={}
+        local worldByKey={}
+        for _,desc in pairs(P:GetWorldItemStarts(mapID) or {}) do
+          local candidate=ClonePreparedDescriptor(desc)
+          local drop=RemoveChangedFromDescriptor(candidate,changed)
+          if not drop then
+            table.insert(worldItemStartPlan,candidate)
+            worldByKey[DescriptorKeyValue(candidate)]=candidate
+          end
+        end
+        local worldDelta=P:BuildWorldItemStartPlanFromNodes(mapID,changedNodes) or {}
+        for _,desc in pairs(worldDelta) do MergePreparedDescriptor(worldByKey,worldItemStartPlan,desc) end
+        table.sort(worldItemStartPlan,function(a,b) return DescriptorKeyValue(a)<DescriptorKeyValue(b) end)
+
         P:SetPreparedMap(mapID,plan,worldItemStartPlan,CurrentDensitySignature())
       end
     end
