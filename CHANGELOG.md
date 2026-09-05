@@ -1,5 +1,16 @@
 # Questie-Octo Changelog
 
+## 1.06
+- Fixed instance/detail World Maps such as Razorfen Kraul being mistaken for the global World overview when the client reports a nonstandard continent ID.
+- A concrete non-World map texture now takes priority over the client's special continent sentinel, preserving the validated rapid World-overview protection while allowing dungeon maps to render their quest objectives.
+- When texture identity is briefly unavailable, Questie-Octo can use the native selected-zone label only when it resolves uniquely to real WorldMapArea artwork.
+- No quest-loading delay, polling, database change, or additional persistent map index was added.
+
+## 1.05
+- Fixed active dungeon quest objectives being visible on the minimap but missing from some dungeon/detail World Maps such as Razorfen Kraul.
+- World Map fallback identity now distinguishes duplicate AreaTable names using the current client's WorldMapArea data instead of dropping the map context.
+- The fix is generic for similarly duplicated dungeon/map names and does not add polling, slower map rendering, or hardcoded dungeon IDs.
+
 ## 1.04
 - Fixed a World Map pin-pool error that could appear after map pins had been recycled and reused for a while.
 - The frame pool now uses Lua 5.0-safe list removal, preventing a stale pool size from returning a nil map pin.

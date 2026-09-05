@@ -428,25 +428,46 @@ local function UpdatePosition(pin,x,y,offsetX,offsetY)
   )
 end
 
+local function DisplayedZoneLabel()
+  -- The current FrameXML keeps the selected zone label in the native dropdown
+  -- even for instance/detail maps whose continent tuple is nonstandard. Use it
+  -- only when a real zone selection exists; the global World overview clears
+  -- the zone selection, so stale text cannot override the World guard.
+  local zid=GetCurrentMapZone and tonumber(GetCurrentMapZone()) or nil
+  if not zid or zid<=0 then return nil end
+  if type(UIDropDownMenu_GetText)~="function" or not WorldMapZoneDropDown then return nil end
+  local ok,name=pcall(UIDropDownMenu_GetText,WorldMapZoneDropDown)
+  if ok and type(name)=="string" and name~="" then return name end
+  return nil
+end
+
 local function IsGlobalWorldOverview()
-  -- The current Turtle/Octo FrameXML can transiently keep the previous
-  -- continent index while GetMapInfo() has already switched to the two-
-  -- continent World texture. It also treats continent IDs above
-  -- CONTINENTS_LENGTH as the global overview. Texture identity is therefore
-  -- the primary signal; the client sentinel is a second fail-closed guard.
+  -- The rendered texture is authoritative. During a rapid zone -> continent ->
+  -- World transition the native continent tuple can still be stale, while
+  -- GetMapInfo() already reports "World". Conversely, instance/detail maps on
+  -- this client can use continent IDs above CONTINENTS_LENGTH, so that sentinel
+  -- must never override a concrete non-World texture.
   local textureName=QuestieOcto.API and QuestieOcto.API.GetDisplayedMapTextureName
     and QuestieOcto.API:GetDisplayedMapTextureName() or nil
-  if textureName=="World" then return true end
+  if textureName then return textureName=="World" end
+
+  -- If GetMapInfo() is temporarily unavailable, a selected native zone label
+  -- that uniquely owns WorldMapArea art is still sufficient to prove this is a
+  -- real zone/instance map rather than the global overview.
+  local selectedName=DisplayedZoneLabel()
+  if selectedName and QuestieOcto.API and QuestieOcto.API.GetWorldMapAreaIDByName
+     and QuestieOcto.API:GetWorldMapAreaIDByName(selectedName) then
+    return false
+  end
 
   local cid=GetCurrentMapContinent and tonumber(GetCurrentMapContinent()) or nil
   local maxContinents=tonumber(CONTINENTS_LENGTH)
   if cid and maxContinents and cid>maxContinents then return true end
 
   -- Native WorldMapFrame falls back to the World texture when GetMapInfo() is
-  -- temporarily unavailable. Only fail closed on an empty identity here; do
-  -- not reject cid<=0 by itself because custom instance/detail maps can be
-  -- identified safely through their texture.
-  if not textureName and (not cid or cid<=0) then return true end
+  -- unavailable and no selected map identity can be recovered. Fail closed in
+  -- that genuinely identity-less state.
+  if not cid or cid<=0 then return true end
   return false
 end
 
@@ -463,9 +484,13 @@ local function DisplayedMapID()
   local textureMapID=QuestieOcto.API and QuestieOcto.API.GetDisplayedMapAreaID
     and QuestieOcto.API:GetDisplayedMapAreaID() or nil
 
-  -- A continent overview also has a map texture. Do not mistake that texture
-  -- for a selected zone; preserve the dedicated continent projection path.
-  if cid and cid>0 and (not zid or zid<=0) then
+  -- A normal continent overview also has a map texture. Do not mistake that
+  -- texture for a selected zone; preserve the dedicated continent projection
+  -- path. Nonstandard continent IDs (> CONTINENTS_LENGTH) are used by real
+  -- instance/detail maps on this client and must continue into selected-map
+  -- resolution instead of being classified as a continent overview.
+  local maxContinents=tonumber(CONTINENTS_LENGTH)
+  if cid and cid>0 and (not maxContinents or cid<=maxContinents) and (not zid or zid<=0) then
     local continentMapID=QuestieOcto.ContinentProjection
       and QuestieOcto.ContinentProjection:GetClientContinentMapID(cid) or nil
     if textureMapID and continentMapID~=nil and tonumber(textureMapID)~=tonumber(continentMapID) then
@@ -476,11 +501,24 @@ local function DisplayedMapID()
 
   if textureMapID then return tonumber(textureMapID) end
 
-  -- Vanilla selected-zone fallback: localized zone name -> canonical DB map ID.
-  if not cid or cid<=0 or not zid or zid<=0 or not GetMapZones then return nil end
-  local zones={GetMapZones(cid)}
-  local name=zones[zid]
+  -- Selected-zone fallback. Prefer the native dropdown's current label because
+  -- instance/detail maps are not guaranteed to be enumerable through
+  -- GetMapZones(continentID). The WorldMapArea-backed reverse index accepts the
+  -- name only when exactly one real map-art owner has that localized name.
+  local name=DisplayedZoneLabel()
+  local worldMapAreaID=name and QuestieOcto.API and QuestieOcto.API.GetWorldMapAreaIDByName
+    and QuestieOcto.API:GetWorldMapAreaIDByName(name) or nil
+  if worldMapAreaID then return tonumber(worldMapAreaID) end
+
+  -- Ordinary Vanilla zone fallback when the native dropdown text is not
+  -- available. A generic AreaTable lookup remains last because duplicate names
+  -- intentionally fail closed there.
+  if not name and cid and cid>0 and zid and zid>0 and GetMapZones then
+    local zones={GetMapZones(cid)}
+    name=zones[zid]
+  end
   if not name then return nil end
+
   if QuestieOcto.DatabaseAPI.GetMapIDByName then
     return QuestieOcto.DatabaseAPI:GetMapIDByName(name)
   end
