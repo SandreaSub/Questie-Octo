@@ -1,5 +1,17 @@
 # Questie-Octo Changelog
 
+## 1.09
+- Fixed clustered quest objectives sometimes disappearing on shared entrance/interior maps such as Wailing Caverns, Uldaman, Maraudon, Dire Maul, and Timbermaw Hold.
+- Item-start markers now stay on the correct entrance or dungeon map before they are grouped, including very rare zone-wide starter-item drops.
+- Full Nodes behavior and the existing Gnomeregan and Karazhan map handling are preserved.
+
+## 1.08
+- Fixed Wailing Caverns, Uldaman, Maraudon, Dire Maul, and Timbermaw Hold entrance maps sharing their dungeon/raid AreaTable ID and inheriting markers from the wrong map.
+- Corrected the minimap geometry used for each entrance/interior pair so objective nodes line up with the map the player is actually in.
+- Rebuilt stale Dire Maul and Timbermaw Hold locations against the current client/server maps, including Dire Maul interior AreaTriggers, and removed one stale Maraudon source location.
+- Sources that legitimately exist on both sides are kept on both maps and separated by their real coordinates instead of being hidden or assigned wholesale to one map.
+- Normal quest-loading speed, ZoneBootstrap batching, minimap update frequency, and Karazhan's existing fail-closed handling are unchanged.
+
 ## 1.07
 - Fixed Gnomeregan's entrance map and dungeon map sharing AreaTable ID 721 and leaking each other's quest/objective/service markers.
 - Rebuilt Gnomeregan interior creature, object, and quest AreaTrigger coordinates against the current client WorldMapArea geometry and current server spawns, fixing nodes projected onto the wrong parts of the dungeon map.

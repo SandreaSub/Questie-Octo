@@ -543,6 +543,8 @@ local function DisplayedContextKey()
 end
 
 local function SharedMapContextModule(mapID)
+  local sharedInstances=QuestieOcto.SharedInstanceContext
+  if sharedInstances and sharedInstances:IsSharedArea(mapID) then return sharedInstances end
   local karazhan=QuestieOcto.KarazhanContext
   if karazhan and karazhan:IsSharedArea(mapID) then return karazhan end
   local gnomeregan=QuestieOcto.GnomereganContext
@@ -556,13 +558,19 @@ local function DisplayedSpecialMapContext(mapID)
   return nil
 end
 
-local function NodeAllowedOnDisplayedMap(node,x,y)
+local function NodeAllowedOnDisplayedMap(node,x,y,preparedMapContext)
   local contextModule=SharedMapContextModule(M.mapID)
+  if preparedMapContext then
+    return preparedMapContext==M.specialMapContext
+  end
   if contextModule then return contextModule:NodeAllowed(node,M.specialMapContext,x,y) end
   return true
 end
 
 local function ItemAreaAllowedOnDisplayedMap(area)
+  if area and area.preparedMapContext then
+    return area.preparedMapContext==M.specialMapContext
+  end
   local contextModule=SharedMapContextModule(M.mapID)
   if contextModule then return contextModule:ItemAreaAllowed(area,M.specialMapContext) end
   return true
@@ -607,7 +615,7 @@ local function AddTrackerTargetCoords(targets,seen,coords,sourceKind,sourceID)
         local specialMapContext=nil
         local contextModule=SharedMapContextModule(mapID)
         if contextModule then
-          specialMapContext=contextModule:GetSourceContext(sourceKind,sourceID,x,y)
+          specialMapContext=contextModule:GetSourceContext(sourceKind,sourceID,x,y,mapID)
         end
         local key=tostring(mapID)..":"..tostring(specialMapContext or "")..":"..
           string.format("%.3f",x)..":"..string.format("%.3f",y)
@@ -1517,7 +1525,7 @@ function M:RenderPreparedDescriptor(desc,generation,renderItemStarts)
 
   if desc.type=="nodeSlot" then
     for _,entry in pairs(desc.entries or {}) do
-      if entry.node and NodeAllowedOnDisplayedMap(entry.node,desc.x,desc.y)
+      if entry.node and NodeAllowedOnDisplayedMap(entry.node,desc.x,desc.y,desc.preparedMapContext)
          and (renderItemStarts or entry.node.role~="itemStart") then
         M:GetOrCreate(
           desc.key,
@@ -1535,7 +1543,7 @@ function M:RenderPreparedDescriptor(desc,generation,renderItemStarts)
 
   -- Backward compatibility for a prepared map published by an older cache
   -- during an in-session update/reload boundary.
-  if desc.type=="node" and desc.node and NodeAllowedOnDisplayedMap(desc.node,desc.x,desc.y)
+  if desc.type=="node" and desc.node and NodeAllowedOnDisplayedMap(desc.node,desc.x,desc.y,desc.preparedMapContext)
      and (renderItemStarts or desc.node.role~="itemStart") then
     M:GetOrCreate(desc.key,desc.node,desc.x,desc.y,desc.clusterCount or 1,generation,desc.kind or "objective")
   end

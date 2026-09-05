@@ -68,7 +68,47 @@ local function FullPointKey(prefix,node,x,y)
   return "full:quest:"..string.format("%.2f",x)..":"..string.format("%.2f",y)
 end
 
-local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key)
+local function ContextualKey(key,context)
+  if not context then return key end
+  return tostring(key)..":context:"..tostring(context)
+end
+
+local function SharedPreparationContextResolver(mapID)
+  local shared=QuestieOcto.SharedInstanceContext
+  if not shared or not shared:IsSharedArea(mapID) then return nil end
+
+  return function(node,x,y)
+    return shared:GetSourceContext(
+      node and node.sourceKind,node and node.sourceID,x,y,mapID
+    )
+  end
+end
+
+local function PointGroupsForNode(node,mapID,contextResolver)
+  local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
+  if not contextResolver then return {{points=points}} end
+
+  local byContext={}
+  local _,point
+  for _,point in pairs(points or {}) do
+    local context=contextResolver(node,point.x,point.y)
+    if context then
+      local group=byContext[context]
+      if not group then
+        group={context=context,points={}}
+        byContext[context]=group
+      end
+      table.insert(group.points,point)
+    end
+  end
+
+  local groups={}
+  for _,group in pairs(byContext) do table.insert(groups,group) end
+  table.sort(groups,function(a,b) return tostring(a.context)<tostring(b.context) end)
+  return groups
+end
+
+local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key,preparedMapContext)
   local slot=slots[key]
   if not slot then
     slot={
@@ -77,10 +117,18 @@ local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key)
       y=y,
       key=key,
       coordKey=string.format("%.2f:%.2f",x,y),
+      preparedMapContext=nil,
       entries={}
     }
     slots[key]=slot
     table.insert(plan,slot)
+  end
+
+  if preparedMapContext then
+    if slot.preparedMapContext and slot.preparedMapContext~=preparedMapContext then
+      return
+    end
+    slot.preparedMapContext=preparedMapContext
   end
 
   table.insert(slot.entries,{
@@ -96,35 +144,39 @@ function P:BuildPlanFromNodes(mapID,nodes)
 
   local plan={}
   local slots={}
+  local contextResolver=SharedPreparationContextResolver(mapID)
 
   for _,node in pairs(nodes or {}) do
     if node.role~="itemStart" then
+      local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+
       if ExactRole(node.role) then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"exact",
-            DescriptorKey(node,point.x,point.y)
-          )
-        end
-      else
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-
-        if QuestieOcto.MinimapSettings:Get("objectiveNodeDensity")=="full" then
-          for _,point in pairs(points) do
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(DescriptorKey(node,point.x,point.y),group.context)
             AddNormal(
-              plan,slots,node,point.x,point.y,1,"objectiveFull",
-              FullPointKey("objective-full",node,point.x,point.y)
+              plan,slots,node,point.x,point.y,1,"exact",key,group.context
             )
           end
-        else
+        end
+      elseif QuestieOcto.MinimapSettings:Get("objectiveNodeDensity")=="full" then
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("objective-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"objectiveFull",key,group.context
+            )
+          end
+        end
+      else
+        for _,group in pairs(pointGroups) do
           local areas=QuestieOcto.Clustering:BuildAreas(
-            points,QuestieOcto.Clustering.objectiveRadius
+            group.points,QuestieOcto.Clustering.objectiveRadius
           )
 
           for _,area in pairs(areas) do
-            AddNormal(plan,slots,node,area.x,area.y,area.n,"objective",AreaKey(node,area))
+            local key=ContextualKey(AreaKey(node,area),group.context)
+            AddNormal(plan,slots,node,area.x,area.y,area.n,"objective",key,group.context)
           end
         end
       end
@@ -134,21 +186,24 @@ function P:BuildPlanFromNodes(mapID,nodes)
   if QuestieOcto.MinimapSettings:Get("itemStartDensity")=="full" then
     for _,node in pairs(nodes or {}) do
       if node.role=="itemStart" then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"itemStartFull",
-            FullPointKey("itemstart-full",node,point.x,point.y)
-          )
+        local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("itemstart-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"itemStartFull",key,group.context
+            )
+          end
         end
       end
     end
   else
-    local itemAreas=QuestieOcto.ItemStartAreas:BuildForMap(nodes or {},mapID)
+    local itemAreas=QuestieOcto.ItemStartAreas:BuildForMap(nodes or {},mapID,nil,contextResolver)
     for _,area in pairs(itemAreas) do
       table.insert(plan,{
         type="itemStartArea",
         area=area,
+        preparedMapContext=area.preparedMapContext,
         key="itemarea:"..tostring(area.key)
       })
     end
@@ -175,38 +230,46 @@ function P:BuildWorldItemStartPlanFromNodes(mapID,nodes)
   local plan={}
   local slots={}
   local density=QuestieOcto.MinimapSettings:Get("itemStartDensity")
+  local contextResolver=SharedPreparationContextResolver(mapID)
 
   if density=="full" then
     for _,node in pairs(nodes or {}) do
       if node.role=="itemStart" and not IsWorldMapUltraRareItemStart(node) then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"itemStartFull",
-            FullPointKey("itemstart-full",node,point.x,point.y)
-          )
+        local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("itemstart-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"itemStartFull",key,group.context
+            )
+          end
         end
       end
     end
   else
     local normalAreas=QuestieOcto.ItemStartAreas:BuildForMap(
       nodes or {},mapID,
-      function(node) return not IsWorldMapUltraRareItemStart(node) end
+      function(node) return not IsWorldMapUltraRareItemStart(node) end,
+      contextResolver
     )
     for _,area in pairs(normalAreas) do
       table.insert(plan,{
         type="itemStartArea",
         area=area,
+        preparedMapContext=area.preparedMapContext,
         key="itemarea:"..tostring(area.key)
       })
     end
   end
 
-  local rareAreas=QuestieOcto.ItemStartAreas:BuildZoneWideRareForMap(nodes or {},mapID)
+  local rareAreas=QuestieOcto.ItemStartAreas:BuildZoneWideRareForMap(
+    nodes or {},mapID,contextResolver
+  )
   for _,area in pairs(rareAreas) do
     table.insert(plan,{
       type="itemStartArea",
       area=area,
+      preparedMapContext=area.preparedMapContext,
       key="itemrarearea:"..tostring(area.key)
     })
   end
@@ -214,6 +277,7 @@ function P:BuildWorldItemStartPlanFromNodes(mapID,nodes)
   table.sort(plan,function(a,b) return tostring(a.key)<tostring(b.key) end)
   return plan
 end
+
 
 function P:SetPreparedMap(mapID,plan,worldItemStartPlan,densitySignature)
   mapID=tonumber(mapID)

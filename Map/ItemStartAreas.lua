@@ -83,41 +83,48 @@ local function SortSources(area)
   return result
 end
 
-function A:BuildForMap(nodes,mapID,includeNode)
+function A:BuildForMap(nodes,mapID,includeNode,pointContext)
   local groups={}
 
   -- Group by quest + starter item first. Different starter quests never merge.
   for _,node in pairs(nodes or {}) do
     if node.role=="itemStart" and tonumber(node.itemID) and node.coords
        and (not includeNode or includeNode(node)) then
-      local groupKey=tostring(node.questID)..":"..tostring(node.itemID)
-      local group=groups[groupKey]
-
-      if not group then
-        group={
-          questID=node.questID,
-          itemID=node.itemID,
-          itemName=node.itemName,
-          points={}
-        }
-        groups[groupKey]=group
-      end
-
       for _,coord in pairs(node.coords) do
         if type(coord)=="table" and tonumber(coord[3])==tonumber(mapID) then
           local x=tonumber(coord[1])
           local y=tonumber(coord[2])
 
           if x and y then
-            table.insert(group.points,{
-              x=x,
-              y=y,
-              sourceID=node.sourceID,
-              sourceName=node.sourceName,
-              sourceRank=node.sourceRank,
-              respawnSeconds=node.respawnSeconds,
-              chance=node.chance
-            })
+            local preparedMapContext=pointContext and pointContext(node,x,y) or nil
+            if not pointContext or preparedMapContext then
+              local groupKey=tostring(node.questID)..":"..tostring(node.itemID)
+              if preparedMapContext then
+                groupKey=groupKey..":context:"..tostring(preparedMapContext)
+              end
+              local group=groups[groupKey]
+
+              if not group then
+                group={
+                  questID=node.questID,
+                  itemID=node.itemID,
+                  itemName=node.itemName,
+                  preparedMapContext=preparedMapContext,
+                  points={}
+                }
+                groups[groupKey]=group
+              end
+
+              table.insert(group.points,{
+                x=x,
+                y=y,
+                sourceID=node.sourceID,
+                sourceName=node.sourceName,
+                sourceRank=node.sourceRank,
+                respawnSeconds=node.respawnSeconds,
+                chance=node.chance
+              })
+            end
           end
         end
       end
@@ -163,8 +170,12 @@ function A:BuildForMap(nodes,mapID,includeNode)
       area.itemID=group.itemID
       area.itemName=group.itemName
       area.sourceList=SortSources(area)
+      area.preparedMapContext=group.preparedMapContext
       area.key=tostring(group.questID)..":"..tostring(group.itemID)..":"..
         string.format("%.1f",area.anchorX)..":"..string.format("%.1f",area.anchorY)
+      if area.preparedMapContext then
+        area.key=area.key..":context:"..tostring(area.preparedMapContext)
+      end
 
       -- Use the first/largest source as the display-name fallback.
       local first=area.sourceList[1]
@@ -188,38 +199,45 @@ end
 -- These drops are often spread across many unrelated creatures throughout a
 -- zone. Keep every source in the underlying data, but represent all <1.00%
 -- sources for the same quest/item with one zone marker on Map and Minimap.
-function A:BuildZoneWideRareForMap(nodes,mapID)
+function A:BuildZoneWideRareForMap(nodes,mapID,pointContext)
   local groups={}
 
   for _,node in pairs(nodes or {}) do
     if node.role=="itemStart" and tonumber(node.itemID) and node.coords
        and self:IsZoneWideRareChance(node.chance) then
-      local groupKey=tostring(node.questID)..":"..tostring(node.itemID)
-      local group=groups[groupKey]
-      if not group then
-        group={
-          questID=node.questID,
-          itemID=node.itemID,
-          itemName=node.itemName,
-          points={}
-        }
-        groups[groupKey]=group
-      end
-
       for _,coord in pairs(node.coords) do
         if type(coord)=="table" and tonumber(coord[3])==tonumber(mapID) then
           local x=tonumber(coord[1])
           local y=tonumber(coord[2])
           if x and y then
-            table.insert(group.points,{
-              x=x,
-              y=y,
-              sourceID=node.sourceID,
-              sourceName=node.sourceName,
-              sourceRank=node.sourceRank,
-              respawnSeconds=node.respawnSeconds,
-              chance=node.chance
-            })
+            local preparedMapContext=pointContext and pointContext(node,x,y) or nil
+            if not pointContext or preparedMapContext then
+              local groupKey=tostring(node.questID)..":"..tostring(node.itemID)
+              if preparedMapContext then
+                groupKey=groupKey..":context:"..tostring(preparedMapContext)
+              end
+              local group=groups[groupKey]
+              if not group then
+                group={
+                  questID=node.questID,
+                  itemID=node.itemID,
+                  itemName=node.itemName,
+                  preparedMapContext=preparedMapContext,
+                  points={}
+                }
+                groups[groupKey]=group
+              end
+
+              table.insert(group.points,{
+                x=x,
+                y=y,
+                sourceID=node.sourceID,
+                sourceName=node.sourceName,
+                sourceRank=node.sourceRank,
+                respawnSeconds=node.respawnSeconds,
+                chance=node.chance
+              })
+            end
           end
         end
       end
@@ -251,9 +269,13 @@ function A:BuildZoneWideRareForMap(nodes,mapID)
       area.itemID=group.itemID
       area.itemName=group.itemName
       area.sourceList=SortSources(area)
+      area.preparedMapContext=group.preparedMapContext
       area.zoneWideRare=true
       area.rareThreshold=self.zoneWideRareThreshold
       area.key=tostring(group.questID)..":"..tostring(group.itemID)..":zone-rare:"..tostring(mapID)
+      if area.preparedMapContext then
+        area.key=area.key..":context:"..tostring(area.preparedMapContext)
+      end
 
       local first=area.sourceList[1]
       area.displayName=first and first.name or "Rare item-start source"

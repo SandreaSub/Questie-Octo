@@ -37,6 +37,8 @@ local function Settings()
 end
 
 local function SharedMapContextModule(mapID)
+  local sharedInstances=QuestieOcto.SharedInstanceContext
+  if sharedInstances and sharedInstances:IsSharedArea(mapID) then return sharedInstances end
   local karazhan=QuestieOcto.KarazhanContext
   if karazhan and karazhan:IsSharedArea(mapID) then return karazhan end
   local gnomeregan=QuestieOcto.GnomereganContext
@@ -618,11 +620,13 @@ end
 -- zone-wide representative marker without changing the underlying source data.
 -- Inside dungeons/raids, only those ultra-rare representative markers are
 -- hidden; meaningful >=1.00% item starters remain visible.
-local function MinimapNodeVisible(node,allowItemStart,x,y)
+local function MinimapNodeVisible(node,allowItemStart,x,y,preparedMapContext)
   if not node or not IsRoleEnabled(node.role) or not PvPNodeVisible(node) then return false end
 
   local contextModule=SharedMapContextModule(MM.mapID)
-  if contextModule and not contextModule:NodeAllowed(node,MM.specialMapContext,x,y) then
+  if preparedMapContext then
+    if preparedMapContext~=MM.specialMapContext then return false end
+  elseif contextModule and not contextModule:NodeAllowed(node,MM.specialMapContext,x,y) then
     return false
   end
 
@@ -642,7 +646,9 @@ local function ItemAreaVisible(area,allowItemStart)
   if MM.inDungeonOrRaid and area.zoneWideRare then return false end
 
   local contextModule=SharedMapContextModule(MM.mapID)
-  if contextModule and not contextModule:ItemAreaAllowed(area,MM.specialMapContext) then
+  if area.preparedMapContext then
+    if area.preparedMapContext~=MM.specialMapContext then return false end
+  elseif contextModule and not contextModule:ItemAreaAllowed(area,MM.specialMapContext) then
     return false
   end
 
@@ -677,10 +683,10 @@ local function DescriptorHasVisibleEntry(desc,revision,allowItemStart)
   elseif desc.type=="nodeSlot" then
     for _,entry in pairs(desc.entries or {}) do
       local node=entry.node
-      if MinimapNodeVisible(node,allowItemStart,x,y) then visible=true; break end
+      if MinimapNodeVisible(node,allowItemStart,x,y,desc.preparedMapContext) then visible=true; break end
     end
   elseif desc.type=="node" and desc.node then
-    visible=MinimapNodeVisible(desc.node,allowItemStart,x,y)
+    visible=MinimapNodeVisible(desc.node,allowItemStart,x,y,desc.preparedMapContext)
   end
 
   desc.minimapVisibilityRevision=visibilityRevision
@@ -733,7 +739,7 @@ local function BindDescriptor(pin,desc,revision,allowItemStart)
   local fullNode=nil
   for _,entry in pairs(entries or {}) do
     local node=entry.node
-    if MinimapNodeVisible(node,allowItemStart,x,y) then
+    if MinimapNodeVisible(node,allowItemStart,x,y,desc.preparedMapContext) then
       visible=true
       pin.clusterCount=math.max(pin.clusterCount or 1,entry.clusterCount or 1)
       AddEntry(pin,node)
