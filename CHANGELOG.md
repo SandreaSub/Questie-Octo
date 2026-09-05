@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.10
+- Fixed **Data Rescue** guidance in Gnomeregan so the punch-card terminals are shown as the quest progresses.
+- Matrix Punchograph 3005-A now appears on the Gnomeregan Entrance map when you have a White Punch Card; the B, C, and D terminals appear at the correct dungeon locations for the later cards.
+- The marker automatically advances to the next terminal after your punch card is upgraded.
+
 ## 1.09
 - Fixed clustered quest objectives sometimes disappearing on shared entrance/interior maps such as Wailing Caverns, Uldaman, Maraudon, Dire Maul, and Timbermaw Hold.
 - Item-start markers now stay on the correct entrance or dungeon map before they are grouped, including very rare zone-wide starter-item drops.

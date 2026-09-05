@@ -48,10 +48,10 @@ AddIDs(G.interiorCreatures,{
 })
 
 G.entranceObjects={}
-AddIDs(G.entranceObjects,{1731,3658,23305,106318,144112,2010914,2020021})
+AddIDs(G.entranceObjects,{1731,3658,23305,106318,142345,144112,2010914,2020021})
 
 G.interiorObjects={}
-AddIDs(G.interiorObjects,{19020,74448,142344,142487,144112,175084,175085,2020020})
+AddIDs(G.interiorObjects,{19020,74448,142344,142475,142476,142487,142696,144112,175084,175085,2020020})
 
 G.entranceAreaTriggers={}
 AddIDs(G.entranceAreaTriggers,{324,523,1104})

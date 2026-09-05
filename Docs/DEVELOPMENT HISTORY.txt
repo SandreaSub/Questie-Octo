@@ -1,3 +1,12 @@
+1.10 - GNOMEREGAN DATA RESCUE PUNCH-CARD GUIDANCE
+--------------------------------------------------
+- Built directly from the accepted 1.09 baseline after a live report showed quest 2930 Data Rescue active at Matrix Punchograph 3005-A in the Gnomeregan Entrance with a White Punch Card, but no quest marker on the terminal.
+- The runtime database only exposed the final Prismatic Punch Card (9316) objective, so the required White -> Yellow -> Blue -> Red punch-card interactions were invisible to the map system even though the live server script explicitly gates 3005-A/B/C/D on those carried cards.
+- Added the four carried punch cards as presentation-only IR dependencies for quest 2930 and mapped them to Matrix Punchographs A/B/C/D. Questie-Octo's existing active-quest IR inventory registry now advances the actionable terminal after BAG_UPDATE_DELAYED when the player's card is upgraded; no polling or new OnUpdate path is introduced and the formal quest objective remains Prismatic Punch Card 0/1.
+- Classified 142345 as Gnomeregan Entrance and 142475/142476/142696 as Gnomeregan interior sources in the dedicated AreaTable-721 context module.
+- Reprojected the current B/C/D server spawns against the current Gnomeregan WorldMapArea geometry; B/C legacy 721 coordinates were stale and D had no map coordinates. A's already-current entrance projection is retained explicitly.
+- The staged targets are source-exclusive by context, so Gnomeregan's existing source-ID context filtering remains safe in Clustered mode; the Mechanical Mailbox continues to use its dedicated point-level split.
+
 1.09 - SHARED INSTANCE CONTEXT PRE-CLUSTER CORRECTION
 ------------------------------------------------------------
 - Built from the audit-failed 1.08 implementation while retaining its intended current-data repairs for Wailing Caverns 718, Uldaman 1337, Maraudon 2100, Dire Maul 2557, and Timbermaw Hold 5640. 1.07 remains the last live-validated baseline until Sandrea validates this build.
