@@ -1,3 +1,14 @@
+1.07 - GNOMEREGAN SHARED-MAP CONTEXT + CURRENT GEOMETRY REPAIR
+------------------------------------------------------------
+- Built directly from the accepted/live-validated 1.06 baseline after screenshots from both Gnomeregan Entrance and the Gnomeregan dungeon showed map-721 nodes leaking across the two layouts and interior nodes projected onto stale geometry.
+- Current client WorldMapArea data proves that AreaTable 721 is reused by two distinct map-art contexts: GnomereganEntrance on server map 0 (571.19 x 379.14) and Gnomeregan on server map 90 (1125 x 740). Questie-Octo's legacy map-721 interior coordinates were based on an obsolete ~769.67 x 513.11 span.
+- Added a narrow GnomereganContext module, following the already accepted Karazhan shared-area pattern, so World Map and minimap presentation distinguish entrance vs interior by displayed texture / physical server map while retaining numeric area ID 721 in the database.
+- Current server spawns separate 40 entrance creature IDs from 21 interior creature IDs. Current gameobject/AreaTrigger sources are likewise context-classified. Mechanical Mailbox 144112 legitimately exists in both contexts and is disambiguated by its corrected coordinate rather than hidden or assigned wholesale to one side.
+- Rebuilt only map-721 coordinates for the 21 current interior creature sources and eight current interior object sources using current server positions projected through current WorldMapArea bounds; non-721 coordinates remain untouched. Corrected interior quest AreaTriggers 322 and 1105.
+- Removed stale map-721 coordinates for creature IDs 385 and 9526 because current server data has no Gnomeregan spawn for either.
+- Shared-context filtering is coordinate-aware at prepared/render time so a source that legitimately exists in both contexts cannot leak sibling coordinates. Minimap descriptor visibility caching also includes the shared context, preventing a cached entrance decision from being reused after entering the interior (and vice versa).
+- No polling, new OnUpdate, slower ZoneBootstrap batching, spatial minimap index, navigation delay, or new persistent global map index was added.
+
 1.06 - INSTANCE/DETAIL WORLD MAP SENTINEL FIX
 ------------------------------------------------------------
 - Built on consumed 1.05 after live retesting in Razorfen Kraul showed that `/reload` still left active dungeon objectives visible on the minimap but absent from the opened RFK World Map. Restarting the client is not required for this class of addon change; the failed reload test confirmed 1.05 had not reached the real blocker.

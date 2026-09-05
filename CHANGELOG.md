@@ -1,5 +1,11 @@
 # Questie-Octo Changelog
 
+## 1.07
+- Fixed Gnomeregan's entrance map and dungeon map sharing AreaTable ID 721 and leaking each other's quest/objective/service markers.
+- Rebuilt Gnomeregan interior creature, object, and quest AreaTrigger coordinates against the current client WorldMapArea geometry and current server spawns, fixing nodes projected onto the wrong parts of the dungeon map.
+- Removed two stale Gnomeregan creature locations that no longer have current server spawns, while preserving sources such as the Mechanical Mailbox that legitimately exist in both entrance and interior contexts.
+- The split is presentation/map-context only: normal quest loading speed, ZoneBootstrap batching, minimap update frequency, and the rest of the world-map architecture are unchanged.
+
 ## 1.06
 - Fixed instance/detail World Maps such as Razorfen Kraul being mistaken for the global World overview when the client reports a nonstandard continent ID.
 - A concrete non-World map texture now takes priority over the client's special continent sentinel, preserving the validated rapid World-overview protection while allowing dungeon maps to render their quest objectives.
