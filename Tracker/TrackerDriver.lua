@@ -121,12 +121,17 @@ function D:Rebuild()
           table.insert(objectives,objective)
         end
       end
+      local levelPlus=(state.tag and state.tag~="") and true or false
+      if QuestieOcto.QuestModel and QuestieOcto.QuestModel.HasLevelPlus then
+        levelPlus=QuestieOcto.QuestModel:HasLevelPlus(questID,state.tag)
+      end
       local row={
         id=questID,
         logIndex=state.logIndex,
         title=state.title,
         level=state.level or 0,
         tag=state.tag,
+        levelPlus=levelPlus,
         zoneGroup=state.zoneGroup or "Other",
         complete=state.complete and true or false,
         failed=state.failed and true or false,
@@ -149,6 +154,7 @@ function D:Rebuild()
     table.insert(snapshot,tostring(row.level or 0))
     table.insert(snapshot,row.zoneGroup or "")
     table.insert(snapshot,tostring(row.tag or ""))
+    table.insert(snapshot,row.levelPlus and "1" or "0")
     table.insert(snapshot,row.complete and "1" or "0")
     table.insert(snapshot,row.failed and "1" or "0")
     for j=1,table.getn(row.objectives or {}) do

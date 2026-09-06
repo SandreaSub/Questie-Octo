@@ -1,5 +1,13 @@
 # Questie-Octo Changelog
 
+## 1.14
+- Fixed active dungeon/elite/raid quests losing the `+` level marker in the Quest Log or tracker when the native client quest tag is missing.
+- Quest Log, tracker, World Map, and minimap now use the same audited quest-type fallback for `[level+]` presentation.
+
+## 1.13
+- Fixed missing dungeon `+` markers on Razorfen Kraul quests whose current server quest type is incorrectly stored as a normal quest.
+- **The Gnarled Bramblehide**, **Tainted Brambleheart**, and **Razorfen Grog** now display `[level+]` before acceptance, matching their dungeon-only objectives.
+
 ## 1.12
 - Fixed batches of nearby quest IDs receiving almost identical objective colors on the World Map and minimap, especially in dense custom zones such as Grim Reaches.
 - Active quest objective colors now spread neighboring quests across a much wider bright palette while keeping each quest's color stable across maps, objectives, and sessions.

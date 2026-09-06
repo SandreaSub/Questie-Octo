@@ -1,3 +1,18 @@
+1.14 - QUEST LOG / TRACKER LEVEL-PLUS CONSISTENCY
+--------------------------------------------------
+- Built from accepted 1.13 after live testing showed The Gnarled Bramblehide correctly displayed `[31+]` on the World Map but `[31]` in both the active Quest Log and tracker.
+- Root cause: map tooltips already fell back from a missing native Quest Log tag to the audited compiled Type 1/62/81 quest classification, while Quest Log enhancement and tracker presentation trusted only the native tag.
+- Added one shared QuestModel `HasLevelPlus()` presentation helper. Native non-empty tags remain authoritative; only missing tags fall back to the compiled Elite/Raid/Dungeon type.
+- Quest Log enhancement now uses that helper for its level prefix. TrackerDriver stores a separate `levelPlus` presentation boolean and TrackerFrame renders it, leaving the preserved native `tag` field unchanged for quest-state semantics.
+- No polling, OnUpdate, ZoneBootstrap, map/objective scan, or runtime database payload change.
+
+1.13 - RAZORFEN KRAUL DUNGEON QUEST TYPE CORRECTIONS
+------------------------------------------------------------
+- Built from accepted 1.12 after a live screenshot confirmed quest 41759 The Gnarled Bramblehide is available at Calaran Windseeker but renders `[31]` rather than `[31+]`.
+- The current Turtle server row stores quest 41759 as Type=0 even though its objective text explicitly sends the player into Razorfen Kraul and item 41856 drops only from creatures 62501/62502, whose current coordinates are exclusively on AreaTable 491. The missing plus therefore comes from stale server quest-type metadata, not from quest availability, map identity, or tooltip rendering.
+- Audited the same RFK failure class by requiring a Type=0 quest's complete current objective-source set to be confined to AreaTable 491. Exactly three semantic dungeon quests are affected: 41555 Razorfen Grog, 41758 Tainted Brambleheart, and 41759 The Gnarled Bramblehide. Existing correctly typed RFK quests remain unchanged.
+- Added narrow build-time Type=81 presentation corrections for those three quests. This feeds the existing compiled `questType` field used by available/cache-cold map and minimap tooltips; active quests still prefer the native Quest Log tag. No runtime inference, creature-rank guessing, polling, map scan, or performance path was added.
+
 1.10 - GNOMEREGAN DATA RESCUE PUNCH-CARD GUIDANCE
 --------------------------------------------------
 - Built directly from the accepted 1.09 baseline after a live report showed quest 2930 Data Rescue active at Matrix Punchograph 3005-A in the Gnomeregan Entrance with a White Punch Card, but no quest marker on the terminal.

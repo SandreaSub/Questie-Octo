@@ -757,9 +757,10 @@ function T:Render()
 
     local prefix=""
     if quest.level and tonumber(quest.level) and tonumber(quest.level)>0 then
-      -- Match pfQuest's Vanilla tracker convention: the native quest-log tag
-      -- adds a '+' inside the level brackets, e.g. [40+].
-      prefix="["..tostring(quest.level)..(quest.tag and "+" or "").."] "
+      -- Match the Quest Log/map convention: native tags remain authoritative,
+      -- with the audited compiled Type 1/62/81 projection filling gaps for
+      -- custom quests whose native Quest Log tag is missing.
+      prefix="["..tostring(quest.level)..(quest.levelPlus and "+" or "").."] "
     end
     local title=tostring(quest.title or "Quest")
     if quest.failed then

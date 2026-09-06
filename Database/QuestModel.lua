@@ -116,6 +116,24 @@ local function BuildObjectiveData(questID,objectives)
   return result
 end
 
+local function IsLevelPlusQuestType(questType)
+  questType=tonumber(questType)
+  return questType==1 or questType==62 or questType==81
+end
+
+function QM:HasLevelPlus(questID,nativeTag)
+  -- The native Quest Log tag remains authoritative whenever the client
+  -- supplies one. Some Turtle custom quests have stale client/server type
+  -- metadata, however, while Questie-Octo carries an audited Type 1/62/81
+  -- projection for map presentation. Reuse that same projection for the
+  -- Quest Log and tracker so every surface shows a consistent [level+] cue.
+  if nativeTag and nativeTag~="" then return true end
+  questID=tonumber(questID)
+  if not questID then return false end
+  local q=self:Get(questID)
+  return q and IsLevelPlusQuestType(q.questType) or false
+end
+
 function QM:Clear()
   self.cache={}
 end

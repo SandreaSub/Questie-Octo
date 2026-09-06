@@ -1,6 +1,11 @@
 -- Questie-Octo Elite / Raid / Dungeon quest type projection.
--- Generated from the authoritative Turtle server quest_template supplied with the project.
+-- Generated primarily from the authoritative Turtle server quest_template supplied with the project.
 -- QuestDef.h: Type 1 = Elite, 62 = Raid, 81 = Dungeon.
+--
+-- A very small number of current server quests have stale Type=0 metadata even
+-- though their objective is unambiguously confined to a dungeon. Those audited
+-- presentation corrections are documented inline below so available quests keep
+-- the same [level+] cue players receive from correctly typed dungeon quests.
 --
 -- ClassicAPI's C_QuestLog.GetQuestDetails() is cache-backed and can return nil
 -- for available quests the player has never loaded. Preserve these server types
@@ -1172,6 +1177,8 @@ QuestieOcto.EliteQuestTypes = {
   [41544] = 1,
   [41547] = 1,
   [41550] = 81,
+  -- Server Type=0 correction: Razorfen Grog's only objective source is inside Razorfen Kraul.
+  [41555] = 81,
   [41556] = 81,
   [41557] = 81,
   [41561] = 81,
@@ -1203,6 +1210,10 @@ QuestieOcto.EliteQuestTypes = {
   [41754] = 81,
   [41756] = 81,
   [41757] = 81,
+  -- Server Type=0 corrections: both quests are explicitly Razorfen Kraul quests
+  -- and every current objective source is confined to AreaTable 491.
+  [41758] = 81,
+  [41759] = 81,
   [41760] = 81,
   [41761] = 1,
   [41772] = 1,
