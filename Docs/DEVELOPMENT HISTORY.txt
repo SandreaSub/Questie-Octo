@@ -1,3 +1,11 @@
+1.15 - OBJECTIVE COLOR EXACT-COLLISION TIE-BREAK
+--------------------------------------------------
+- Built from accepted 1.14 after a Grim Reaches follow-up report showed the 1.12 palette was much better visually but raised the question whether two different quests could still receive the exact same rendered color.
+- Broad audit of all 6,701 runtime quest IDs confirmed Grim Reaches itself had no exact default-color duplicates, but the 1.12/1.14 palette still produced 826 duplicate 8-bit RGB groups globally and eight same-map candidate collision pairs across five maps. The cause was a distant rational return in the hue sequence combined with the 30-ID repeat of the saturation/value bands.
+- Preserved the 1.12 hue/saturation/value palette and added only a tiny independent per-quest RGB signature (at most two 8-bit steps per channel). This removes every exact default-mode 8-bit collision across the current 6,701 runtime quests without materially changing the palette's appearance.
+- Accessibility remaps receive a second smaller per-quest signature (at most one 8-bit step per channel after remap/luma lift). Across all 108 runtime map candidate sets, Default, Red-deficient, Green-deficient, Blue-deficient, and High Contrast now have zero exact 8-bit color collisions between quests that can appear on the same map.
+- No quest ownership, map candidate generation, clustering, tracker, database payload, polling, OnUpdate, ZoneBootstrap, or refresh architecture changed.
+
 1.14 - QUEST LOG / TRACKER LEVEL-PLUS CONSISTENCY
 --------------------------------------------------
 - Built from accepted 1.13 after live testing showed The Gnarled Bramblehide correctly displayed `[31+]` on the World Map but `[31]` in both the active Quest Log and tracker.

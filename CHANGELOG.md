@@ -1,5 +1,9 @@
 # Questie-Octo Changelog
 
+## 1.15
+- Removed exact visible RGB collisions between different active-quest objective colors while preserving the 1.12 palette's overall appearance.
+- Added tiny deterministic per-quest color tie-breaks so different quests do not quantize to the same map/minimap color, including in the Objective Color Vision accessibility modes when those quests can appear on the same map.
+
 ## 1.14
 - Fixed active dungeon/elite/raid quests losing the `+` level marker in the Quest Log or tracker when the native client quest tag is missing.
 - Quest Log, tracker, World Map, and minimap now use the same audited quest-type fallback for `[level+]` presentation.

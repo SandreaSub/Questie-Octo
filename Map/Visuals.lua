@@ -46,8 +46,8 @@ end
 -- purple/pink/blue colors. Use the numeric quest ID as the stable identity and
 -- spread adjacent IDs around the hue wheel with a bitless integer permutation.
 -- 65521 is prime and 40494/65521 is a close rational approximation of the
--- golden-ratio conjugate, so every quest ID gets a unique phase across the
--- practical ID range while neighboring IDs are deliberately far apart.
+-- golden-ratio conjugate, so neighboring IDs are deliberately far apart. A
+-- later per-quest tie-break handles distant rational returns of this sequence.
 local function HSVToRGB(h,s,v)
   h=math.mod(tonumber(h) or 0,1)
   s=tonumber(s) or 0
@@ -69,6 +69,38 @@ local function HSVToRGB(h,s,v)
   return v,p,q
 end
 
+local function Clamp01(v)
+  if v<0 then return 0 end
+  if v>1 then return 1 end
+  return v
+end
+
+local function QuestPaletteTieBreak(id,r,g,b)
+  -- Keep the 1.12 hue/saturation/value palette visually intact, but give each
+  -- quest a tiny independent RGB signature. The old secondary bands repeat
+  -- every 30 IDs and the hue sequence has close rational returns, so some
+  -- distant quest IDs could quantize to the exact same visible RGB value even
+  -- though their full-precision HSV values differed. The independent 65519
+  -- modular sequence changes each channel by at most two 8-bit steps.
+  local tone=math.mod(id*26367,65519)
+  local rStep=math.mod(tone,5)-2
+  local gStep=math.mod(math.floor(tone/5),5)-2
+  local bStep=math.mod(math.floor(tone/25),5)-2
+  return Clamp01(r+rStep/255),Clamp01(g+gStep/255),Clamp01(b+bStep/255)
+end
+
+local function AccessibilityTieBreak(id,r,g,b)
+  -- Accessibility remaps can collapse different base colors onto one display
+  -- RGB value after dark-color lifting and 8-bit output. A second, smaller
+  -- independent signature preserves map-local separation without changing the
+  -- character of the selected accessibility palette.
+  local tone=math.mod(id*58788,65519)
+  local rStep=math.mod(tone,5)-2
+  local gStep=math.mod(math.floor(tone/5),5)-2
+  local bStep=math.mod(math.floor(tone/25),5)-2
+  return Clamp01(r+rStep/510),Clamp01(g+gStep/510),Clamp01(b+bStep/510)
+end
+
 local function QuestPaletteColor(questID)
   local id=tonumber(questID) or 0
   id=math.floor(id)
@@ -85,6 +117,7 @@ local function QuestPaletteColor(questID)
   local saturation=0.72+0.04*math.mod(id*17+3,6)
   local value=0.88+0.03*math.mod(id*23+1,5)
   local r,g,b=HSVToRGB(hue,saturation,value)
+  r,g,b=QuestPaletteTieBreak(id,r,g,b)
 
   questPaletteCache[id]={r,g,b}
   return r,g,b
@@ -131,10 +164,12 @@ local function AccessibleQuestColor(mode,r,g,b)
 end
 
 function V:GetQuestColor(questID)
-  local r,g,b=QuestPaletteColor(questID)
+  local id=math.floor(tonumber(questID) or 0)
+  local r,g,b=QuestPaletteColor(id)
   local mode=Settings() and Settings():Get("objectiveColorVisionMode") or "default"
   if mode=="default" then return r,g,b end
-  return AccessibleQuestColor(mode,r,g,b)
+  r,g,b=AccessibleQuestColor(mode,r,g,b)
+  return AccessibilityTieBreak(id,r,g,b)
 end
 
 function V:GetObjectiveColor(questID,objectiveIndex)
