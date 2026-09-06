@@ -138,6 +138,8 @@ for _,reward in pairs(QuestieOcto.QuestRewardsData or {}) do
   for _,entry in pairs(reward.choices or {}) do mark(itemNames,entry[1]) end
 end
 
+load("Data/ScriptedEncounters.lua")
+
 -- Build the legacy candidate index before replacing pfDB.
 local legacyCandidates={}
 local function addMap(mapID,qid)
@@ -150,7 +152,20 @@ local function indexCoords(coords,qid)
 end
 for qid,q in pairs(legacy.quests.data) do
   local s=q.start or {}
-  for _,id in pairs(s.U or {}) do if tonumber(qid)==3861 and tonumber(id)==620 then indexCoords({{55.6,30.9,40,300}},qid) else indexCoords(legacy.units.data[id] and legacy.units.data[id].coords,qid) end end
+  for _,id in pairs(s.U or {}) do
+    if tonumber(qid)==3861 and tonumber(id)==620 then
+      indexCoords({{55.6,30.9,40,300}},qid)
+    else
+      local coords=legacy.units.data[id] and legacy.units.data[id].coords or nil
+      if not coords or not next(coords) then
+        local scripted=QuestieOcto.ScriptedEncounterData and QuestieOcto.ScriptedEncounterData[tonumber(id)] or nil
+        if scripted and (not scripted.roles or scripted.roles.available) then
+          coords=scripted.coords or coords
+        end
+      end
+      indexCoords(coords,qid)
+    end
+  end
   for _,id in pairs(s.O or {}) do indexCoords(legacy.objects.data[id] and legacy.objects.data[id].coords,qid) end
   for _,iid in pairs(s.I or {}) do
     local it=legacy.items.data[iid] or {}

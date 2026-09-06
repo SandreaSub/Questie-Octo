@@ -172,9 +172,13 @@ local function HasCoords(coords)
 end
 
 local function ScriptedEncounterInfo(creatureID,role)
-  if role~="objectiveCreature" and role~="objectiveItemSource" and role~="itemStart" then return nil end
+  if role~="objectiveCreature" and role~="objectiveItemSource" and role~="itemStart"
+     and role~="available" and role~="turnin" then return nil end
   local data=QuestieOcto.ScriptedEncounterData
-  return data and data[tonumber(creatureID)] or nil
+  local info=data and data[tonumber(creatureID)] or nil
+  if not info then return nil end
+  if info.roles and not info.roles[role] then return nil end
+  return info
 end
 
 local function AddCreatureNode(questID,role,creatureID,itemID,chance,objectiveState,vendor)
@@ -188,7 +192,7 @@ local function AddCreatureNode(questID,role,creatureID,itemID,chance,objectiveSt
   end
   local node={
     questID=questID,role=role,event=IsPresentationEvent(q),eventID=q and q.eventID or nil,pvp=q and q.pvp or false,repeatable=q and q.presentationRepeatable or false,sourceKind="creature",sourceID=creatureID,
-    sourceName=QuestieOcto.DatabaseAPI:GetCreatureName(creatureID),
+    sourceName=(usedScripted and scripted.displayName) or QuestieOcto.DatabaseAPI:GetCreatureName(creatureID),
     sourceRank=QuestieOcto.DatabaseAPI:GetCreatureRank(creatureID),
     respawnSeconds=QuestieOcto.DatabaseAPI:GetCreatureRespawnSeconds(creatureID),
     itemID=itemID,itemName=itemID and QuestieOcto.DatabaseAPI:GetItemName(itemID) or nil,

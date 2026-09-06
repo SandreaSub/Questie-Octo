@@ -38,12 +38,27 @@ local function IndexCoords(coords,questID)
   end
 end
 
+local function HasCoords(coords)
+  for _,coord in pairs(coords or {}) do
+    if type(coord)=="table" and tonumber(coord[1]) and tonumber(coord[2]) and tonumber(coord[3]) then
+      return true
+    end
+  end
+  return false
+end
+
 local function StarterCreatureCoords(q,creatureID)
   local marker=q and q.conditionalMapMarker or nil
   if marker and tonumber(marker.creatureID)==tonumber(creatureID) then
     return marker.coords
   end
-  return QuestieOcto.DatabaseAPI:GetCreatureCoords(creatureID)
+  local coords=QuestieOcto.DatabaseAPI:GetCreatureCoords(creatureID)
+  if HasCoords(coords) then return coords end
+  local scripted=QuestieOcto.ScriptedEncounterData and QuestieOcto.ScriptedEncounterData[tonumber(creatureID)] or nil
+  if scripted and (not scripted.roles or scripted.roles.available) then
+    return scripted.coords or coords
+  end
+  return coords
 end
 
 local function IndexQuest(q)

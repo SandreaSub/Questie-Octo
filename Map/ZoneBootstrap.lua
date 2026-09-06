@@ -51,17 +51,47 @@ local function ConditionalCreatureCoords(q,creatureID,role)
   return nil
 end
 
+local function HasCoords(coords)
+  for _,coord in pairs(coords or {}) do
+    if type(coord)=="table" and tonumber(coord[1]) and tonumber(coord[2]) and tonumber(coord[3]) then
+      return true
+    end
+  end
+  return false
+end
+
+local function ScriptedEncounterInfo(creatureID,role)
+  if role~="objectiveCreature" and role~="objectiveItemSource" and role~="itemStart"
+     and role~="available" and role~="turnin" then return nil end
+  local data=QuestieOcto.ScriptedEncounterData
+  local info=data and data[tonumber(creatureID)] or nil
+  if not info then return nil end
+  if info.roles and not info.roles[role] then return nil end
+  return info
+end
+
+local function CreatureCoords(q,creatureID,role)
+  local coords=ConditionalCreatureCoords(q,creatureID,role) or QuestieOcto.DatabaseAPI:GetCreatureCoords(creatureID)
+  local scripted=ScriptedEncounterInfo(creatureID,role)
+  if scripted and not HasCoords(coords) and HasCoords(scripted.coords) then
+    return scripted.coords,scripted
+  end
+  return coords,nil
+end
+
 local function CreatureNode(questID,role,id,itemID,chance,objectiveState)
   local q=QuestieOcto.QuestModel:Get(questID)
+  local coords,scripted=CreatureCoords(q,id,role)
   return ApplyObjectiveState({
     questID=questID,role=role,event=IsPresentationEvent(q),eventID=q and q.eventID or nil,pvp=q and q.pvp or false,repeatable=q and q.presentationRepeatable or false,
     sourceKind="creature",sourceID=id,
-    sourceName=QuestieOcto.DatabaseAPI:GetCreatureName(id),
+    sourceName=(scripted and scripted.displayName) or QuestieOcto.DatabaseAPI:GetCreatureName(id),
     sourceRank=QuestieOcto.DatabaseAPI:GetCreatureRank(id),
     respawnSeconds=QuestieOcto.DatabaseAPI:GetCreatureRespawnSeconds(id),
     itemID=itemID,itemName=itemID and QuestieOcto.DatabaseAPI:GetItemName(itemID) or nil,
-    chance=chance,coords=ConditionalCreatureCoords(q,id,role) or QuestieOcto.DatabaseAPI:GetCreatureCoords(id),
-    conditionalOffer=q and q.conditionalOffer or nil
+    chance=chance,coords=coords,
+    conditionalOffer=q and q.conditionalOffer or nil,
+    scriptedEncounterNote=scripted and scripted.note or nil
   },objectiveState)
 end
 
@@ -74,6 +104,16 @@ local function ObjectNode(questID,role,id,itemID,chance,objectiveState)
     itemID=itemID,itemName=itemID and QuestieOcto.DatabaseAPI:GetItemName(itemID) or nil,
     chance=chance,coords=QuestieOcto.DatabaseAPI:GetObjectCoords(id)
   },objectiveState)
+end
+
+local function AreaTriggerNode(questID,source)
+  if not source or not source.mapID or not source.x or not source.y then return nil end
+  local q=QuestieOcto.QuestModel:Get(questID)
+  return ApplyObjectiveState({
+    questID=questID,role="objectiveArea",event=IsPresentationEvent(q),eventID=q and q.eventID or nil,pvp=q and q.pvp or false,repeatable=q and q.presentationRepeatable or false,
+    sourceKind="areaTrigger",sourceID=source.id,sourceName="Exploration Mark",
+    coords={{source.x,source.y,source.mapID}}
+  },source)
 end
 
 local function AddActiveNodes(nodes,mapID)
@@ -118,6 +158,12 @@ local function AddActiveNodes(nodes,mapID)
               end
             end
           end
+          for _,src in pairs(resolved.areaTrigger or {}) do
+            if not src.complete then
+              local node=AreaTriggerNode(questID,src)
+              if node and CoordsContainMap(node.coords,mapID) then AddNode(nodes,node) end
+            end
+          end
         end
       end
     end
@@ -127,7 +173,7 @@ end
 local function StarterTouchesMap(q,mapID)
   for _,id in pairs(q.starts.creature or {}) do
     if not QuestieOcto.DatabaseAPI.CreatureAllowsPlayerFaction or QuestieOcto.DatabaseAPI:CreatureAllowsPlayerFaction(id) then
-      local coords=ConditionalCreatureCoords(q,id,"available") or QuestieOcto.DatabaseAPI:GetCreatureCoords(id)
+      local coords=CreatureCoords(q,id,"available")
       if CoordsContainMap(coords,mapID) then return true end
     end
   end

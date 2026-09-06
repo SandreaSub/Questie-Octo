@@ -1,5 +1,11 @@
 # Questie-Octo Changelog
 
+## 1.11
+- Fixed missing map guidance for several exploration and scripted quest objectives, including custom Turtle WoW exploration quests.
+- Corrected **The Missing Diplomat** to point to Sentry Point and added the missing **Resupplying the Excavation** destination.
+- Added destination markers for the six Children's Week sightseeing quests.
+- Added map guidance for the scripted Murkdeep, Twilight Corrupter, Vartrus the Ancient, and Malfurion Stormrage encounters when their normal NPC spawns do not exist yet.
+
 ## 1.10
 - Fixed **Data Rescue** guidance in Gnomeregan so the punch-card terminals are shown as the quest progresses.
 - Matrix Punchograph 3005-A now appears on the Gnomeregan Entrance map when you have a White Punch Card; the B, C, and D terminals appear at the correct dungeon locations for the later cards.
