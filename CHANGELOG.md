@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.12
+- Fixed batches of nearby quest IDs receiving almost identical objective colors on the World Map and minimap, especially in dense custom zones such as Grim Reaches.
+- Active quest objective colors now spread neighboring quests across a much wider bright palette while keeping each quest's color stable across maps, objectives, and sessions.
+- Existing Objective Color Vision accessibility modes continue to use the same central quest-color path.
+
 ## 1.11
 - Fixed missing map guidance for several exploration and scripted quest objectives, including custom Turtle WoW exploration quests.
 - Corrected **The Missing Diplomat** to point to Sentry Point and added the missing **Resupplying the Excavation** destination.
