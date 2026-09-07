@@ -1,3 +1,12 @@
+1.16 - MOONWHISPER LOOT-CHANCE CORRECTION
+--------------------------------------------------
+- Built from accepted 1.15 after a live report showed Echoes of Nendis displaying Nendis Memento at 1.00% despite the current server assigning 100% to both Nendis ground containers; the same placeholder-chance problem was reported on Moonwhisper creature objectives.
+- Root cause was source data, not tooltip formatting: the packaged Turtle item database flattens many current custom/shared loot relationships to a placeholder 1%, while Questie-Octo's existing audited `itemfix` corrections were accidentally skipped whenever the item row already existed.
+- Audited all 68 custom required-item IDs used by the current 105 Moonwhisper Coast server quests. Of 353 existing custom item/source pairs that resolve directly to current creature, skinning, or gameobject loot, 324 were wrong and 29 already matched. The 1.16 overwrite layer now matches all 353/353 directly verifiable pairs to current server percentages.
+- The correction is explicit and source-scoped; there is no global rule that rewrites 1% values. Legitimate low drop rates elsewhere are untouched. Creature-source corrections follow current creature/skinning loot ownership and object corrections follow current gameobject loot ownership.
+- Fixed the existing item correction helper to merge source fields into existing item records. All 22 pre-existing itemfix source/value pairs were reverified against current server loot data before enabling them, including the two intended 30% object relationships for items 42178/42180.
+- No tooltip formatter, active-objective state, map clustering, polling, OnUpdate, ZoneBootstrap, or minimap architecture changed.
+
 1.15 - OBJECTIVE COLOR EXACT-COLLISION TIE-BREAK
 --------------------------------------------------
 - Built from accepted 1.14 after a Grim Reaches follow-up report showed the 1.12 palette was much better visually but raised the question whether two different quests could still receive the exact same rendered color.
