@@ -11,6 +11,27 @@ end
 local hashColorCache={}
 local questPaletteCache={}
 
+local objectiveColorModeOffset={
+  default=1,
+  protan=4,
+  deutan=7,
+  tritan=10,
+  highContrast=13,
+}
+
+local function OptimizedQuestColor(id,mode)
+  local palette=QuestieOcto.ObjectiveColorPalette
+  local packed=palette and palette[id]
+  if not packed then return nil end
+
+  local offset=objectiveColorModeOffset[mode] or 1
+  local r=string.byte(packed,offset)
+  local g=string.byte(packed,offset+1)
+  local b=string.byte(packed,offset+2)
+  if not r or not g or not b then return nil end
+  return r/255,g/255,b/255
+end
+
 local function HashColor(text)
   text=tostring(text or "")
   local cached=hashColorCache[text]
@@ -165,8 +186,19 @@ end
 
 function V:GetQuestColor(questID)
   local id=math.floor(tonumber(questID) or 0)
-  local r,g,b=QuestPaletteColor(id)
   local mode=Settings() and Settings():Get("objectiveColorVisionMode") or "default"
+
+  -- 1.17 uses an offline, same-map co-occurrence-aware palette for every
+  -- current quest that can produce a colorized objective marker. These are
+  -- final 8-bit display colors, optimized independently for each accessibility
+  -- mode so perceptually near-identical neighboring quests are avoided without
+  -- any runtime graph work or dynamic recoloring.
+  local r,g,b=OptimizedQuestColor(id,mode)
+  if r then return r,g,b end
+
+  -- Defensive fallback for future/unmapped quest IDs. Keep the deterministic
+  -- 1.15 palette so an unexpected objective still receives one stable color.
+  r,g,b=QuestPaletteColor(id)
   if mode=="default" then return r,g,b end
   r,g,b=AccessibleQuestColor(mode,r,g,b)
   return AccessibilityTieBreak(id,r,g,b)

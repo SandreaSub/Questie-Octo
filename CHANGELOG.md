@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.17
+- Reworked active-objective colors around actual same-map quest co-occurrence so different quests are kept perceptually farther apart instead of merely avoiding exact RGB duplicates.
+- Default and all four Objective Color Vision modes now use stable, precomputed per-quest colors with a validated same-map CIEDE2000 floor after 8-bit rendering.
+- The color change remains presentation-only: one quest keeps one stable color across World Map, minimap, Full Nodes, clustered tint, and glow, with no runtime map graph or dynamic recoloring.
+
 ## 1.16
 - Corrected incorrect quest-item drop and gather percentages across Moonwhisper Coast, including creature drops and ground objects that were being shown as placeholder 1% chances.
 - Fixed the Octo item-source correction layer so audited Turtle loot corrections are merged into existing item records instead of being skipped when the item already exists.
