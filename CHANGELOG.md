@@ -1,5 +1,37 @@
 # Questie-Octo Changelog
 
+## 1.23
+- Kept the authored objective wording for World Map/minimap Shift-hover travel and conversation quests instead of reducing them to generic destination text.
+- Fixed wrapped Shift-hover objective text being reflowed a second time by Vanilla tooltips, preventing awkward short continuation fragments while preserving the tracker-style hanging indent.
+- Quest Browser windows opened by Shift + Left Click now use FULLSCREEN_DIALOG strata so they appear in front of the World Map.
+
+## 1.22
+- Improved compact World Map/minimap Shift-hover objective layout: long fallback rows now keep a tracker-style hanging indent, and pure travel/talk quests use their real destination NPC/object instead of a long prose sentence when no counted objective exists.
+- Added Shift + Left Click on World Map and minimap quest markers to open the represented quest directly in the Quest Browser.
+- Kept authoritative required objective counts for available quests and live Quest Log progress for active quests; chat-link and tracker behavior are unchanged.
+
+## 1.21
+- Limited the compact Shift-hover quest detail view to World Map and minimap quest markers; tracker rows now keep their normal hover tooltip because their objectives are already visible in the tracker.
+- Changed map/minimap Shift-hover objectives to a tracker-style layout with `[level+] Quest` titles and `- objective` rows, using live Quest Log counters for active quests.
+- Added a compact build-time projection of authoritative quest objective requirement counts so available/non-active quests can show required item/creature/object amounts instead of generic objective names when the supplied server data provides them.
+- Kept Rewards compact beneath the objective rows and left full chat-linked quest tooltips unchanged.
+
+## 1.20
+- Reworked Shift-hover quest details into a compact Title / Objectives / Rewards view that stays near the mouse on the tracker, World Map, and minimap.
+- Active quests use their live objective progress when available; other quests fall back to the authored/database objective summary.
+- Fixed repeatable quest status resolution so a currently available repeatable is not mislabeled as completed merely because it was rewarded before.
+- Chat-linked quest details remain unchanged and keep the full description/level presentation.
+
+## 1.19
+- Extended Shift-hover full quest details to World Map and minimap quest markers, using the same quest-detail content builder as Questie-Octo chat links.
+- Fixed the tracker Shift-hover tooltip occasionally stretching into a very wide horizontal panel by rebuilding the Vanilla tooltip from a hidden/cleared state and bounding hover-only quest prose.
+- Map/minimap Shift state now refreshes immediately through `MODIFIER_STATE_CHANGED`; normal map marker tooltips and tracker interactions remain unchanged when Shift is not held.
+
+## 1.18
+- Holding Shift while hovering an active quest in the Questie-Octo tracker now shows the same detailed quest information used by Questie-Octo chat quest links: status, objective text, full description, required level, and quest level.
+- The detailed tooltip switches immediately when Shift is pressed or released through ClassicAPI's modifier-state event; no polling or new OnUpdate loop is used.
+- Normal tracker hover focus and click behavior are preserved, including Shift + Click to stop tracking a quest.
+
 ## 1.17
 - Reworked active-objective colors around actual same-map quest co-occurrence so different quests are kept perceptually farther apart instead of merely avoiding exact RGB duplicates.
 - Default and all four Objective Color Vision modes now use stable, precomputed per-quest colors with a validated same-map CIEDE2000 floor after 8-bit rendering.

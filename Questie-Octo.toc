@@ -2,7 +2,7 @@
 ## Title: Questie-Octo
 ## Notes: Quest helper.
 ## Author: Questie-Octo
-## Version: 1.17
+## Version: 1.23
 ## SavedVariables: QuestieOctoGlobalDB
 ## SavedVariablesPerCharacter: QuestieOctoDB
 
@@ -32,6 +32,7 @@ Data\runtime\finalize.lua
 Data\EventSchedule.lua
 Data\CalendarEventRules.lua
 Data\QuestRewards.lua
+Data\QuestObjectiveRequirements.lua
 Data\ScriptedEncounters.lua
 Data\ObjectiveColorPalette.lua
 

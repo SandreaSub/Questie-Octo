@@ -348,6 +348,20 @@ function T:SetTrackerHoverQuest(questID)
   end
 end
 
+local function ShowBasicQuestRowTooltip(row)
+  if not row or not row.questID or not GameTooltip then return end
+  -- Rebuild from a hidden/cleared frame. This prevents a previously expanded
+  -- full-detail hover from leaving GameTooltip at a stale oversized width.
+  GameTooltip:Hide()
+  if GameTooltip.ClearLines then GameTooltip:ClearLines() end
+  GameTooltip:SetOwner(row,"ANCHOR_LEFT")
+  GameTooltip:SetText(row.questTitle or "Quest",1,0.82,0)
+  GameTooltip:AddLine("Click to open this quest in the Quest Log.",1,1,1)
+  GameTooltip:AddLine("Right click for quest options.",1,1,1)
+  GameTooltip:AddLine("Shift + Click to stop tracking it.",0.7,0.7,0.7)
+  GameTooltip:Show()
+end
+
 local function EnsureRow(index,parent)
   local row=T.rows[index]
   if row then
@@ -368,12 +382,7 @@ local function EnsureRow(index,parent)
   row:SetScript("OnEnter",function()
     if this.questID then
       T:SetTrackerHoverQuest(this.questID)
-      GameTooltip:SetOwner(this,"ANCHOR_LEFT")
-      GameTooltip:SetText(this.questTitle or "Quest",1,0.82,0)
-      GameTooltip:AddLine("Click to open this quest in the Quest Log.",1,1,1)
-      GameTooltip:AddLine("Right click for quest options.",1,1,1)
-      GameTooltip:AddLine("Shift + Click to stop tracking it.",0.7,0.7,0.7)
-      GameTooltip:Show()
+      ShowBasicQuestRowTooltip(this)
     end
   end)
   row:SetScript("OnLeave",function()

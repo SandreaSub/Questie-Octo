@@ -13,6 +13,8 @@ T.hoverIndexNeedsFull=T.hoverIndexNeedsFull or false
 T.hoverPendingChanged=T.hoverPendingChanged or {}
 T.worldTooltipState=T.worldTooltipState or { signature=nil, afterLines=0 }
 T.initialized=T.initialized or false
+T.hoverPin=T.hoverPin
+T.modifierFrame=T.modifierFrame
 
 local function Settings()
   return QuestieOcto.MinimapSettings
@@ -109,6 +111,8 @@ local function MapTooltip(pin)
 end
 
 function T:Hide(pin)
+  if not pin or self.hoverPin==pin then self.hoverPin=nil end
+
   local tooltip=MapTooltip(pin)
   if not tooltip then return end
 
@@ -1355,14 +1359,108 @@ function T:Initialize()
     self.worldWatcher=watcher
   end
 
+  -- Map/minimap pins need to rebuild immediately when Shift changes while the
+  -- cursor remains over the same pin. Event-driven refresh mirrors Questie's
+  -- Vanilla behavior and avoids any polling or OnUpdate work.
+  if not self.modifierFrame and CreateFrame then
+    local frame=CreateFrame("Frame","QuestieOctoMapTooltipModifierWatcher",UIParent)
+    local ok=pcall(frame.RegisterEvent,frame,"MODIFIER_STATE_CHANGED")
+    if ok then
+      self.modifierFrame=frame
+      frame:SetScript("OnEvent",function()
+        local pin=T.hoverPin
+        if not pin then return end
+        if pin.IsShown and not pin:IsShown() then
+          T.hoverPin=nil
+          return
+        end
+        if MouseIsOver and not MouseIsOver(pin) then
+          T.hoverPin=nil
+          return
+        end
+        T:Show(pin)
+      end)
+    end
+  end
+
   if QuestieOcto.Nodes and QuestieOcto.Nodes.ready then self:RebuildHoverIndex() end
 end
 
 QuestieOcto:RegisterMessage("NODES_READY",T,"ScheduleHoverIndex")
 QuestieOcto:RegisterMessage("NODES_CHANGED",T,"ScheduleHoverIndex")
 
+-- Return the distinct quests represented by the exact hovered pin. Normal
+-- World Map hover may combine neighboring pins for readability, but Shift
+-- intentionally expands only the pin under the cursor so a dense cluster does
+-- not turn into several screenfuls of unrelated quest descriptions.
+local function PinQuestIDs(pin)
+  local ids={}
+  local seen={}
+  local function AddQuestID(value)
+    local questID=tonumber(value)
+    if not questID or questID<=0 or seen[questID] then return end
+    seen[questID]=true
+    ids[table.getn(ids)+1]=questID
+  end
+
+  if pin and pin.itemStartArea then AddQuestID(pin.itemStartArea.questID) end
+  for _,entry in pairs((pin and pin.entries) or {}) do
+    if entry and entry.node then AddQuestID(entry.node.questID) end
+  end
+  if pin then AddQuestID(pin.questID) end
+
+  table.sort(ids,function(a,b)
+    local qa=QuestieOcto.QuestModel and QuestieOcto.QuestModel:Get(a) or nil
+    local qb=QuestieOcto.QuestModel and QuestieOcto.QuestModel:Get(b) or nil
+    local la=qa and tonumber(qa.level) or 0
+    local lb=qb and tonumber(qb.level) or 0
+    if la==lb then return a<b end
+    return la<lb
+  end)
+  return ids
+end
+
+function T:GetPrimaryQuestID(pin)
+  if not pin then return nil end
+  local questID=tonumber(pin.questID)
+  if questID and questID>0 then return questID end
+  local ids=PinQuestIDs(pin)
+  return ids[1]
+end
+
+local function ShowShiftQuestDetails(pin,tooltip)
+  if not IsShiftKeyDown or not IsShiftKeyDown() then return false end
+  local linker=QuestieOcto.QuestLinkTooltip
+  if not linker or not linker.PopulateQuestHoverTooltip then return false end
+
+  local questIDs=PinQuestIDs(pin)
+  if table.getn(questIDs)==0 then return false end
+
+  -- Hide before rebuilding. Vanilla can preserve stale tooltip dimensions when
+  -- ClearLines() is used on a still-visible tooltip; the same issue caused the
+  -- stretched tracker tooltip reported against 1.18.
+  tooltip:Hide()
+  tooltip:SetOwner(pin,"ANCHOR_CURSOR")
+  if tooltip.ClearLines then tooltip:ClearLines() end
+  ResetCenteredTildes(tooltip)
+
+  local added=0
+  for i=1,table.getn(questIDs) do
+    local questID=questIDs[i]
+    if added>0 then tooltip:AddLine(" ",0,0,0) end
+    if linker:PopulateQuestHoverTooltip(tooltip,questID,nil,40) then
+      added=added+1
+    end
+  end
+
+  if added==0 then return false end
+  tooltip:Show()
+  return true
+end
+
 function T:Show(pin)
   if not pin then return end
+  self.hoverPin=pin
   pin.questieOctoTooltipPin=true
 
   local tooltip=MapTooltip(pin)
@@ -1418,6 +1516,11 @@ function T:Show(pin)
   end
 
   if not Settings():Get("enableTooltips") then return end
+
+  -- Shift-hover uses a compact Title / Objectives / Rewards view near the
+  -- cursor. MapTooltip(pin) keeps the correct host frame: WorldMapTooltip for
+  -- fullscreen World Map pins, GameTooltip/private pfUI tooltip for minimap.
+  if ShowShiftQuestDetails(pin,tooltip) then return end
 
   if pin:GetParent()==WorldMapButton and
      QuestieOcto.Map and QuestieOcto.Map.GetNearbyQuestTooltipPins then

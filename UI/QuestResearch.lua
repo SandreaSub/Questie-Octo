@@ -452,11 +452,17 @@ local function MakeFilterButton(parent,label,value,x)
 end
 
 function R:OpenWindowNow()
-  if self.frame then self.frame:Show(); self.frame:Raise(); self:RefreshRows(); return end
+  if self.frame then
+    -- WorldMapFrame lives on FULLSCREEN. Keep the browser above it when opened
+    -- from a map/minimap Shift-click, while remaining below TOOLTIP strata.
+    self.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    self.frame:SetFrameLevel(100)
+    self.frame:Show(); self.frame:Raise(); self:RefreshRows(); return
+  end
 
   local f=CreateFrame("Frame","QuestieOctoQuestBrowser",UIParent)
   f:SetWidth(800); f:SetHeight(590); f:SetPoint("CENTER",UIParent,"CENTER",0,20)
-  f:SetFrameStrata("DIALOG"); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
+  f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(100); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart",function() this:StartMoving() end); f:SetScript("OnDragStop",function() this:StopMovingOrSizing() end)
   f:SetBackdrop({bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",tile=true,tileSize=32,edgeSize=32,insets={left=11,right=12,top=12,bottom=11}})
   f:SetBackdropColor(0.04,0.04,0.04,0.97)
@@ -537,6 +543,36 @@ function R:OpenWindowNow()
   end
 
   self:RefreshRows()
+end
+
+-- Open the Quest Browser directly on one known quest. Map/minimap Shift-click
+-- uses an exact numeric search so the selected quest is unambiguous even when
+-- several quests share the same localized title.
+function R:OpenQuest(questID)
+  questID=tonumber(questID)
+  if not questID or questID<=0 then return false end
+  if not QuestieOcto.QuestModel or not QuestieOcto.QuestModel:Get(questID) then return false end
+
+  self.query=tostring(questID)
+  self.statusFilter="all"
+  self.selectedQuestID=questID
+
+  QuestieOcto.Scheduler:After(0.03,function()
+    local options=QuestieOcto.Options
+    if options then
+      options.openedFromGameMenu=false
+      if options.Hide then options:Hide() end
+      if options.configFrame and options.configFrame.frame then options.configFrame.frame:Hide() end
+    end
+    if GameMenuFrame and GameMenuFrame:IsShown() then
+      if HideUIPanel then HideUIPanel(GameMenuFrame) else GameMenuFrame:Hide() end
+    end
+
+    R:OpenWindowNow()
+    if R.searchBox then R.searchBox:SetText(R.query or "") end
+    R:RebuildResults()
+  end,"quest-browser-open-quest")
+  return true
 end
 
 function R:OpenWindow()

@@ -566,8 +566,18 @@ function MM:GetOrCreate(index)
     tex:SetAllPoints(pin)
     pin.texture=tex
 
+    pin:RegisterForClicks("LeftButtonUp")
     pin:SetScript("OnEnter",function() QuestieOcto.Tooltips:Show(this) end)
     pin:SetScript("OnLeave",function() QuestieOcto.Tooltips:Hide(this) end)
+    pin:SetScript("OnClick",function()
+      if arg1~="LeftButton" or not IsShiftKeyDown or not IsShiftKeyDown() then return end
+      local questID=QuestieOcto.Tooltips and QuestieOcto.Tooltips.GetPrimaryQuestID
+        and QuestieOcto.Tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
+      if questID and QuestieOcto.QuestResearch and QuestieOcto.QuestResearch.OpenQuest then
+        QuestieOcto.Tooltips:Hide(this)
+        QuestieOcto.QuestResearch:OpenQuest(questID)
+      end
+    end)
 
     self.frames[index]=pin
     self.stats.created=self.stats.created+1

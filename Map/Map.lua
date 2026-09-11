@@ -1005,9 +1005,20 @@ local function AttachWorldMapPinInput(pin)
   pin:RegisterForClicks("LeftButtonUp")
   pin:SetScript("OnEnter",function() QuestieOcto.Tooltips:Show(this) end)
   pin:SetScript("OnLeave",function() QuestieOcto.Tooltips:Hide(this) end)
-  -- Continent-map markers should behave as zone-entry targets instead of
-  -- swallowing the click that would otherwise select the zone underneath.
-  pin:SetScript("OnClick",function() OpenContinentZoneForPin(this) end)
+  -- Shift + Left Click opens the quest represented by the hovered pin directly
+  -- in Questie-Octo's Quest Browser. Ordinary clicks retain the established
+  -- continent-map zone-entry behavior.
+  pin:SetScript("OnClick",function()
+    if arg1=="LeftButton" and IsShiftKeyDown and IsShiftKeyDown() then
+      local questID=QuestieOcto.Tooltips and QuestieOcto.Tooltips.GetPrimaryQuestID
+        and QuestieOcto.Tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
+      if questID and QuestieOcto.QuestResearch and QuestieOcto.QuestResearch.OpenQuest then
+        QuestieOcto.Tooltips:Hide(this)
+        if QuestieOcto.QuestResearch:OpenQuest(questID) then return end
+      end
+    end
+    OpenContinentZoneForPin(this)
+  end)
 end
 
 local function ResetPooledWorldMapPin(pin)

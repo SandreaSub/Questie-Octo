@@ -70,6 +70,8 @@ Questie-Octo can automatically track accepted quests.
 
 To manually track or untrack a quest, use **Shift + Left Click** on the quest in the Quest Log.
 
+On the World Map or minimap, hold **Shift** while hovering a quest marker to see a compact tracker-style quest summary with the quest title, objectives, required amounts/current progress when known, and rewards. The tracker itself keeps its normal hover because its objective rows are already visible.
+
 ### Quest Browser
 
 The **Quest Browser** button is available in the bottom-left corner of the Questie-Octo settings window. You can also open it with `/qo quests`.
