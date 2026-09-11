@@ -498,27 +498,113 @@ local function CandidateIDs(q,kind)
   return {}
 end
 
+-- Native objective text often contains a short action label rather than the
+-- database entity's full name (for example `Check First Cage` versus
+-- `First Witherbark Cage`). Pure edit distance can then prefer the wrong
+-- sibling merely because another full name happens to be one character
+-- closer. Rank shared whole-word tokens first, with words unique among the
+-- remaining same-type candidates carrying the most weight, then use the old
+-- Levenshtein distance only as a tie-break/fallback. This stays locale-local:
+-- both the native objective text and candidate names come from the active
+-- client/pfDB locale.
+local OBJECTIVE_MATCH_STOP_WORDS={
+  ["a"]=true,["an"]=true,["the"]=true,["of"]=true,["to"]=true,["in"]=true,
+  ["on"]=true,["and"]=true,["or"]=true,["with"]=true,["at"]=true,["from"]=true,
+  ["for"]=true,["is"]=true,["are"]=true,["be"]=true,["by"]=true,["into"]=true,
+  ["this"]=true,["that"]=true,["your"]=true,["you"]=true,["his"]=true,["her"]=true,
+  ["its"]=true,["their"]=true,["our"]=true,["my"]=true,["has"]=true,["have"]=true,
+  ["had"]=true,["was"]=true,["were"]=true,["as"]=true,["then"]=true,["return"]=true,
+}
+
+local function ObjectiveMatchTokens(text)
+  local result={}
+  local lowered=string.lower(tostring(text or ""))
+  string.gsub(lowered,"([%w]+)",function(token)
+    if not OBJECTIVE_MATCH_STOP_WORDS[token] then result[token]=true end
+    return token
+  end)
+  return result
+end
+
+local function BetterObjectiveTokenScore(aExclusive,aShared,aWeight,aDistance,
+                                         bExclusive,bShared,bWeight,bDistance)
+  if aExclusive~=bExclusive then return aExclusive>bExclusive end
+  if aShared~=bShared then return aShared>bShared end
+  if aWeight~=bWeight then return aWeight>bWeight end
+  return aDistance<bDistance
+end
+
 local function BestSameTypeCandidate(q,kind,row,used)
   local ids=CandidateIDs(q,kind)
-  local count=0
-  local onlyID=nil
-  for _,id in pairs(ids) do
-    if not used[kind..":"..tostring(id)] then count=count+1; onlyID=id end
-  end
-  if count==1 then O.stats.single=O.stats.single+1; return onlyID end
+  local available={}
+  local names={}
+  local tokenFrequency={}
 
-  local bestID=nil
-  local bestDistance=999999
-  local desc=row.text or ""
-  for _,id in pairs(ids) do
+  -- These are packed objective arrays. Use their numeric order only to build
+  -- the candidate set; matching itself is text/identity based and does not
+  -- assume that the Quest Log and database objective arrays share an order.
+  for i=1,table.getn(ids) do
+    local id=ids[i]
     if not used[kind..":"..tostring(id)] then
       local name=CandidateName(kind,id)
       if name then
-        local distance=Levenshtein(desc,name)
-        if distance<bestDistance then bestDistance=distance; bestID=id end
+        table.insert(available,id)
+        names[id]=name
+        local tokens=ObjectiveMatchTokens(name)
+        names["tokens:"..tostring(id)]=tokens
+        for token,_ in pairs(tokens) do
+          tokenFrequency[token]=(tokenFrequency[token] or 0)+1
+        end
       end
     end
   end
+
+  if table.getn(available)==1 then
+    O.stats.single=O.stats.single+1
+    return available[1]
+  end
+  if table.getn(available)==0 then return nil end
+
+  local desc=row.text or row.rawText or ""
+  local descTokens=ObjectiveMatchTokens(desc)
+  local bestID=nil
+  local bestExclusive=-1
+  local bestShared=-1
+  local bestWeight=-1
+  local bestDistance=999999
+
+  for i=1,table.getn(available) do
+    local id=available[i]
+    local name=names[id]
+    local tokens=names["tokens:"..tostring(id)] or {}
+    local exclusive=0
+    local shared=0
+    local weight=0
+
+    for token,_ in pairs(tokens) do
+      if descTokens[token] then
+        local frequency=tokenFrequency[token] or 1
+        shared=shared+1
+        if frequency==1 then exclusive=exclusive+1 end
+        -- Integer weighting keeps the comparison simple on Lua 5.0 while
+        -- still making uncommon and longer matching words more informative.
+        weight=weight+math.floor(1000/frequency)+math.min(string.len(token),10)*10
+      end
+    end
+
+    local distance=Levenshtein(desc,name)
+    if not bestID or BetterObjectiveTokenScore(
+      exclusive,shared,weight,distance,
+      bestExclusive,bestShared,bestWeight,bestDistance
+    ) then
+      bestID=id
+      bestExclusive=exclusive
+      bestShared=shared
+      bestWeight=weight
+      bestDistance=distance
+    end
+  end
+
   if bestID then O.stats.fuzzy=O.stats.fuzzy+1 end
   return bestID
 end

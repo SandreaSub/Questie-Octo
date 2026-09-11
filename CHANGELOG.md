@@ -1,5 +1,10 @@
 # Questie-Octo Changelog
 
+## 1.25
+- Fixed fallback objective matching for quests with several similarly named targets, preventing one objective's completion state from being attached to the wrong map marker when ClassicAPI does not provide a reliable live objective ID.
+- **Witherbark Cages** now distinguishes the First, Second, and Third cages by their objective wording instead of relying on edit distance between similar names.
+- Audited the same multi-objective matching path against current server quest objectives; the token-aware matcher fixes additional ordinal/location-style cases without regressing the previously correct matches.
+
 ## 1.24
 - Shift + Left Click on a World Map or minimap marker that represents several quests now opens the Quest Browser with every quest attached to that exact marker in the result list.
 - Single-quest markers keep the existing direct-open behavior, and the marker's primary quest remains selected initially when several quests are shown.
