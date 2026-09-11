@@ -1,5 +1,9 @@
 # Questie-Octo Changelog
 
+## 1.24
+- Shift + Left Click on a World Map or minimap marker that represents several quests now opens the Quest Browser with every quest attached to that exact marker in the result list.
+- Single-quest markers keep the existing direct-open behavior, and the marker's primary quest remains selected initially when several quests are shown.
+
 ## 1.23
 - Kept the authored objective wording for World Map/minimap Shift-hover travel and conversation quests instead of reducing them to generic destination text.
 - Fixed wrapped Shift-hover objective text being reflowed a second time by Vanilla tooltips, preventing awkward short continuation fragments while preserving the tracker-style hanging indent.

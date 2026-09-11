@@ -1420,6 +1420,10 @@ local function PinQuestIDs(pin)
   return ids
 end
 
+function T:GetQuestIDs(pin)
+  return PinQuestIDs(pin)
+end
+
 function T:GetPrimaryQuestID(pin)
   if not pin then return nil end
   local questID=tonumber(pin.questID)

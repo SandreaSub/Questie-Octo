@@ -1010,11 +1010,17 @@ local function AttachWorldMapPinInput(pin)
   -- continent-map zone-entry behavior.
   pin:SetScript("OnClick",function()
     if arg1=="LeftButton" and IsShiftKeyDown and IsShiftKeyDown() then
-      local questID=QuestieOcto.Tooltips and QuestieOcto.Tooltips.GetPrimaryQuestID
-        and QuestieOcto.Tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
-      if questID and QuestieOcto.QuestResearch and QuestieOcto.QuestResearch.OpenQuest then
+      local research=QuestieOcto.QuestResearch
+      local tooltips=QuestieOcto.Tooltips
+      local questIDs=tooltips and tooltips.GetQuestIDs and tooltips:GetQuestIDs(this) or nil
+      local questID=tooltips and tooltips.GetPrimaryQuestID and tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
+      if research and questID then
         QuestieOcto.Tooltips:Hide(this)
-        if QuestieOcto.QuestResearch:OpenQuest(questID) then return end
+        if questIDs and table.getn(questIDs)>1 and research.OpenQuests then
+          if research:OpenQuests(questIDs,questID) then return end
+        elseif research.OpenQuest and research:OpenQuest(questID) then
+          return
+        end
       end
     end
     OpenContinentZoneForPin(this)

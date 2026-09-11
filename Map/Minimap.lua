@@ -571,11 +571,17 @@ function MM:GetOrCreate(index)
     pin:SetScript("OnLeave",function() QuestieOcto.Tooltips:Hide(this) end)
     pin:SetScript("OnClick",function()
       if arg1~="LeftButton" or not IsShiftKeyDown or not IsShiftKeyDown() then return end
-      local questID=QuestieOcto.Tooltips and QuestieOcto.Tooltips.GetPrimaryQuestID
-        and QuestieOcto.Tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
-      if questID and QuestieOcto.QuestResearch and QuestieOcto.QuestResearch.OpenQuest then
+      local research=QuestieOcto.QuestResearch
+      local tooltips=QuestieOcto.Tooltips
+      local questIDs=tooltips and tooltips.GetQuestIDs and tooltips:GetQuestIDs(this) or nil
+      local questID=tooltips and tooltips.GetPrimaryQuestID and tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
+      if research and questID then
         QuestieOcto.Tooltips:Hide(this)
-        QuestieOcto.QuestResearch:OpenQuest(questID)
+        if questIDs and table.getn(questIDs)>1 and research.OpenQuests then
+          research:OpenQuests(questIDs,questID)
+        elseif research.OpenQuest then
+          research:OpenQuest(questID)
+        end
       end
     end)
 
