@@ -1,5 +1,12 @@
 # Questie-Octo Changelog
 
+## 1.26
+- Restored **In Search of the Owner**, including its Uncommon Journal starter in Hillsbrad and Roheg Clay turn-in in Stormwind, from current server quest/relation/spawn evidence.
+- Restored the two missing Hardcore mystery-chain steps **A Mysterious Errand** and **The 52nd Package** from current Turtle server/database evidence.
+- Fixed the Hardcore mystery-chain prerequisites so the sequence now progresses 40914 -> 40915 -> 40916 -> 40917 through 40923 instead of entering the stale 40917/40922 prerequisite loop.
+- Updated the restored chain segment to the current server quest names/text and kept its dungeon-style `[level+]` classification, Hardcore gating, objective count, and Maraudon objective color mapping consistent with existing Questie-Octo behavior.
+- Audited current starter/finisher relation differences as a class; deprecated/cancelled rows remain suppressed and intentional locatable-object navigation proxies are preserved instead of being replaced by unlocatable formal NPC relations.
+
 ## 1.25
 - Fixed fallback objective matching for quests with several similarly named targets, preventing one objective's completion state from being attached to the wrong map marker when ClassicAPI does not provide a reliable live objective ID.
 - **Witherbark Cages** now distinguishes the First, Second, and Third cages by their objective wording instead of relying on edit distance between similar names.
