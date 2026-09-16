@@ -486,54 +486,63 @@ function Q:ShowQuest(questID,text)
   return true
 end
 
+-- The stock Vanilla ItemRefTooltip:SetHyperlink() does not accept quest: or
+-- quest2: links. A hooksecurefunc("SetItemRef", ...) callback runs *after* the
+-- stock function, which already throws "Unknown link type" on those links.
+-- Own just quest-link clicks before the stock handler; forward every other
+-- hyperlink unchanged to the existing Blizzard/pfUI/other-addon wrapper chain.
+function Q:ShowUnavailableQuest(link,text)
+  if not ItemRefTooltip then return end
+  self.lastQuestLink=nil
+  if ItemRefTooltip.ClearLines then ItemRefTooltip:ClearLines() end
+  if ShowUIPanel then ShowUIPanel(ItemRefTooltip) end
+  if ItemRefTooltip.SetOwner then ItemRefTooltip:SetOwner(UIParent,"ANCHOR_PRESERVE") end
+  local title=LinkTitle(text) or "Quest"
+  ItemRefTooltip:AddLine(title,1,0.82,0)
+  ItemRefTooltip:AddLine("Quest details are not available in Questie-Octo.",0.8,0.8,0.8,true)
+  local _,_,rawID=string.find(link,"^quest:(%d+)")
+  local questID=tonumber(rawID)
+  if questID then ItemRefTooltip:AddLine("Quest ID: "..tostring(questID),0.65,0.65,0.65) end
+  ItemRefTooltip:Show()
+end
+
 function Q:HandleSetItemRef(link,text,button)
-  -- Quest Log Shift+click-to-chat is handled by TrackerDriver before a link
-  -- exists. Once a hyperlink is clicked in chat, keep modifier-click behavior
-  -- available to Blizzard/other addons rather than replacing it here.
-  if AnyModifierDown() then return false end
-
-  -- Normal left- or right-click opens quest details, matching pfQuest's
-  -- Vanilla behavior. Modifier clicks were already returned above.
-  if button and button~="LeftButton" and button~="RightButton" then return false end
-
-  if IsQuestLink(link) then
-    local questID=ResolveQuestID(link,text)
-    if questID and Q:ShowQuest(questID,text) then return true end
-  else
+  if not IsQuestLink(link) then
     -- A normal item/player/etc. hyperlink replaces ItemRefTooltip ownership.
-    -- Forget the previous quest signature so returning to that quest does not
-    -- incorrectly look like a second click on an already-open quest tooltip.
-    Q.lastQuestLink=nil
+    self.lastQuestLink=nil
+    return false
   end
-  return false
+
+  -- Never send a quest hyperlink into the stock ItemRefTooltip:SetHyperlink,
+  -- even when the quest isn't in our DB or a modifier is held.
+  if IsControlKeyDown and IsControlKeyDown() then return true end
+  if IsShiftKeyDown and IsShiftKeyDown() then
+    if ChatFrameEditBox and ChatFrameEditBox.IsVisible and ChatFrameEditBox:IsVisible() then
+      ChatFrameEditBox:Insert(text or "")
+    end
+    return true
+  end
+
+  if button and button~="LeftButton" and button~="RightButton" then return true end
+  local questID=ResolveQuestID(link,text)
+  if questID and self:ShowQuest(questID,text) then return true end
+  self:ShowUnavailableQuest(link,text)
+  return true
 end
 
 function Q:InstallHook()
   if self.hooked or type(SetItemRef)~="function" then return end
 
-  -- Prefer an additive post-hook. This lets Blizzard, pfUI and other addons
-  -- keep ownership of their SetItemRef chain while Questie-Octo replaces only
-  -- the final quest-link presentation. It also avoids cutting off wrappers
-  -- installed before us. The current Turtle/ClassicAPI environment exposes
-  -- hooksecurefunc; retain the old forwarding wrapper only as a compatibility
-  -- fallback for clients where it is unavailable.
-  if type(hooksecurefunc)=="function" then
-    hooksecurefunc("SetItemRef",function(link,text,button)
-      Q:HandleSetItemRef(link,text,button)
-    end)
-    self.hookMode="post"
-    self.hooked=true
-    return
-  end
-
+  -- Pre-dispatch wrapper is required, not a secure post-hook: the latter cannot
+  -- prevent the native "Unknown link type" exception. Capturing the current
+  -- function preserves earlier pfUI wrappers; later pfUI wrappers also preserve
+  -- us because they forward to the captured SetItemRef function.
   local original=SetItemRef
   self.originalSetItemRef=original
-
   SetItemRef=function(link,text,button)
     if Q:HandleSetItemRef(link,text,button) then return end
     return original(link,text,button)
   end
-
   self.hookMode="wrapper"
   self.hooked=true
 end

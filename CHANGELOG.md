@@ -1,5 +1,9 @@
 # Questie-Octo Changelog
 
+## 1.27
+- Fixed chat-linked quests triggering Vanilla’s “Unknown link type” error when opened, including with pfUI enabled. Questie-Octo now handles quest hyperlinks before the native item-link handler, while other links keep their existing behavior.
+- Quest links absent from the local database now show a safe unavailable-details tooltip instead of producing a Lua error.
+
 ## 1.26
 - Restored **In Search of the Owner**, including its Uncommon Journal starter in Hillsbrad and Roheg Clay turn-in in Stormwind, from current server quest/relation/spawn evidence.
 - Restored the two missing Hardcore mystery-chain steps **A Mysterious Errand** and **The 52nd Package** from current Turtle server/database evidence.
