@@ -1,5 +1,34 @@
 # Questie-Octo Changelog
 
+## 1.34
+- Added five website-corroborated objective quantities for three existing quests: Draenei Divination, Rite of Resurrection, and The Silver Blade. Display counts only; live Quest Log progress still wins.
+- Generated a source-only lookup of the six salvage archives with exact evidence pointers and parent-item/source distinctions; kept uncertain mastery rewards and all unresolved data out of gameplay.
+- No new quests, source drops, rewards, map markers, availability, polling, or compiled runtime data changes.
+
+## 1.33
+- Archived historical quest-reward provenance for 11 weapon-mastery books and older item/creature-loot records for two Damaged Relic Mechanisms, without promoting historical drop chances to gameplay.
+- Only two Squirrel Token origins remain unresolved from the focused 15-item investigation; no gameplay or compiled database changes.
+
+## 1.32
+- Archived source-only acquisition provenance for Cuergo's Treasure Map, Warlord Goretooth's Command, and Elegant Letter, including spell, reagent, container-loot, and gossip-script references.
+- No gameplay, compiled DB, quest marker, reward or quest availability changes.
+
+## 1.31
+- Preserved source-only acquisition provenance for four spell-assembled quest-starting books and the Hardcore missive mailed by server code; documented unresolved and commented-out source cases.
+- No gameplay, compiled data, map markers, quest availability, rewards or runtime behavior changes.
+
+## 1.30
+- Continued source-only quest-data salvage: preserved upstream provenance for contained quest-start items, classified remaining item-source gaps against quest rewards, vendor and mail records, and archived additional individually indexed Turtle quest pages.
+- No new in-game quests, map markers, rewards, availability or runtime behavior.
+
+## 1.29
+- Continued the Turtle database salvage in a **source-only archive**: preserved item-inside-item starter sources, relations for previously archived server-only quests, and indexed website quest/reward observations with uncertainty and provenance.
+- No new quests, runtime rewards, map markers, Quest Browser records, availability changes, or gameplay updates.
+
+## 1.28
+- Added a source-only archive of five server-snapshot quest rows excluded from the playable quest index; kept a reference roster of 720 quests already present in Questie-Octo but absent from the snapshot, plus three unverified website reward observations.
+- Archived data is not loaded or compiled and does not change in-game quest availability, markers, browser results, rewards, or runtime behavior.
+
 ## 1.27
 - Fixed chat-linked quests triggering Vanilla’s “Unknown link type” error when opened, including with pfUI enabled. Questie-Octo now handles quest hyperlinks before the native item-link handler, while other links keep their existing behavior.
 - Quest links absent from the local database now show a safe unavailable-details tooltip instead of producing a Lua error.

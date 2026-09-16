@@ -1,5 +1,7 @@
--- Generated from the supplied authoritative Turtle WoW tw_world_quest_template.sql.
--- Only current Questie-Octo runtime objective identities with an exact server match are retained.
+-- Base projection: supplied Turtle WoW tw_world_quest_template.sql.
+-- Only existing Questie-Octo runtime objective identities with exact matching IDs are retained.
+-- The three 1.34 additions come from individually rechecked indexed Turtle quest pages;
+-- these are display-only counts, not live-server verification. See Docs/PHASE8_QUEST_OBJECTIVE_COUNTS_2026-09-16.md.
 -- Keys: I=item, U=creature, O=gameobject. Values are required objective counts.
 QuestieOcto.QuestObjectiveRequirements = {
   [2]={I={[16305]=1}},
@@ -3554,6 +3556,9 @@ QuestieOcto.QuestObjectiveRequirements = {
   [41388]={U={[60057]=1,[60058]=1,[60059]=1,[60060]=1}},
   [41391]={I={[41428]=1}},
   [41392]={I={[41429]=1}},
+  [41913]={I={[8831]=12,[42134]=10,[42135]=6}},
+  [41935]={I={[42179]=10}},
+  [42003]={I={[12662]=30}},
   [50002]={I={[50063]=1}},
   [50004]={I={[50064]=1}},
   [50230]={I={[50231]=1,[50232]=1,[50233]=1}},
