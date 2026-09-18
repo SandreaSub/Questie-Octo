@@ -1512,7 +1512,26 @@ function T:Show(pin)
       end
     else
       tooltip:SetText(tostring(title),.2,1,.35)
-      tooltip:AddLine(permanentLabel,1,.82,0)
+      local serviceLabel=permanentLabel
+      if pin.role=="flightMaster" then
+        -- Classify flight SERVICE access, not the NPC's reaction faction.
+        -- Neutral goblins may operate a faction-specific taxi node.
+        local flightFaction=nil
+        for _,entry in pairs(pin.entries or {}) do
+          if entry.node and entry.node.role=="flightMaster" then
+            flightFaction=entry.node.serviceFaction
+            break
+          end
+        end
+        if flightFaction=="A" then
+          serviceLabel="Flight Master (Alliance)"
+        elseif flightFaction=="H" then
+          serviceLabel="Flight Master (Horde)"
+        elseif flightFaction=="AH" or flightFaction=="HA" then
+          serviceLabel="Flight Master (Alliance & Horde)"
+        end
+      end
+      tooltip:AddLine(serviceLabel,1,.82,0)
     end
     tooltip:Show()
     FinalizeCenteredTildes(tooltip)

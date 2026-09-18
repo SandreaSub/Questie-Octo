@@ -1,5 +1,16 @@
 # Questie-Octo Changelog
 
+## 1.36
+- Audited all 83 tracked flight masters against the supplied server taxi/spawn snapshot and the current client TaxiNodes.dbc, including eight custom nodes absent from the server SQL.
+- Corrected Treggi (62624) at Slickwick Oil Rig to Horde-only flight service; the client taxi node does not have an Alliance mount.
+- Suppressed obsolete Shaethis Darkoak (1233) flight markers; the server snapshot has no spawn and the client has no taxi point at either inherited location. Original unit/source data remains available for future re-evaluation.
+- Did not infer or create markers for unrepresented taxi/transport nodes, alter existing live-verified location overrides, or change quest data.
+
+## 1.35
+- Corrected Mudsprocket flight master Razzit (61133) to Horde-only flight service: the supplied server taxi node 180 has no Alliance mount, despite the neutral NPC and stale cross-faction tracking entry. Alliance characters no longer see Questie-Octo's unavailable Razzit marker.
+- Flight-master World Map/minimap tooltips now identify the service faction (Alliance, Horde, or both). No quest data or unrelated map-service categories changed.
+
+
 ## 1.34
 - Added five website-corroborated objective quantities for three existing quests: Draenei Divination, Rite of Resurrection, and The Silver Blade. Display counts only; live Quest Log progress still wins.
 - Generated a source-only lookup of the six salvage archives with exact evidence pointers and parent-item/source distinctions; kept uncertain mastery rewards and all unresolved data out of gameplay.
