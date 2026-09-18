@@ -9,6 +9,9 @@ S.queue = {}
 S.queueHead = 1
 S.queueTail = 0
 S.delayed = {}
+S.dueKeys = {}
+S.latestTimerToken = {}
+S.nextTimerToken = 0
 S.elapsed = 0
 S.interval = 0
 S.executed = 0
@@ -26,10 +29,10 @@ function S:PendingCount()
   return n
 end
 
-function S:Enqueue(fn, label)
+function S:Enqueue(fn, label, timerKey, timerToken)
   if not fn then return end
   self.queueTail=(self.queueTail or 0)+1
-  self.queue[self.queueTail]={fn=fn,label=label}
+  self.queue[self.queueTail]={fn=fn,label=label,timerKey=timerKey,timerToken=timerToken}
   local n=self:PendingCount()
   if n>(self.stats.maxQueue or 0) then self.stats.maxQueue=n end
 end
@@ -37,28 +40,39 @@ end
 function S:After(delay, fn, key)
   if not fn then return end
   if key then
-    self.delayed[key] = { remaining=delay or 0, fn=fn, label=tostring(key) }
+    self.nextTimerToken=(self.nextTimerToken or 0)+1
+    local token=self.nextTimerToken
+    self.latestTimerToken[key]=token
+    self.delayed[key] = { remaining=delay or 0, fn=fn, label=tostring(key), key=key, token=token }
   else
     table.insert(self.delayed, { remaining=delay or 0, fn=fn, label="delayed" })
   end
 end
 
 local function RunDelayed(self, delta)
-  local remove = {}
+  -- Reuse one persistent due-key array instead of allocating a fresh table on
+  -- every OnUpdate, including frames where no delayed timer expires.
+  local due=self.dueKeys
+  local dueCount=0
   for k,v in pairs(self.delayed) do
     v.remaining = v.remaining - delta
-    if v.remaining <= 0 then table.insert(remove, k) end
+    if v.remaining <= 0 then
+      dueCount=dueCount+1
+      due[dueCount]=k
+    end
   end
 
-  -- Due timers enter the same bounded FIFO as every other continuation. The
-  -- previous scheduler executed every due callback synchronously before its
-  -- frame budget even started; a login/reload event burst could therefore put
-  -- substantial work back into one frame despite the queue budget.
-  for _,k in pairs(remove) do
+  -- Due timers enter the same bounded FIFO as every other continuation. Keyed
+  -- timers carry a monotonic token into the queue so a newer schedule can also
+  -- invalidate an older callback that has already left the delayed table.
+  local i
+  for i=1,dueCount do
+    local k=due[i]
+    due[i]=nil
     local entry = self.delayed[k]
     self.delayed[k] = nil
     if entry and entry.fn then
-      self:Enqueue(entry.fn,"timer:"..tostring(entry.label or k))
+      self:Enqueue(entry.fn,"timer:"..tostring(entry.label or k),entry.key,entry.token)
     end
   end
 end
@@ -80,16 +94,19 @@ function S:Tick()
     -- A missing/cancelled slot must never trap the scheduler in a while loop.
     -- Continue advancing the head even if an entry was somehow cleared.
     if entry and entry.fn then
-      local jobStart=(GetTime and GetTime()) or start
-      entry.fn()
-      local jobEnd=(GetTime and GetTime()) or jobStart
-      local elapsed=jobEnd-jobStart
-      self.executed=self.executed+1
-      ran=ran+1
-      self.stats.lastLabel=entry.label or "unlabelled"
-      if elapsed>(self.stats.slowestSeconds or 0) then
-        self.stats.slowestSeconds=elapsed
-        self.stats.slowestLabel=entry.label or "unlabelled"
+      local stale=entry.timerKey and self.latestTimerToken[entry.timerKey]~=entry.timerToken
+      if not stale then
+        local jobStart=(GetTime and GetTime()) or start
+        entry.fn()
+        local jobEnd=(GetTime and GetTime()) or jobStart
+        local elapsed=jobEnd-jobStart
+        self.executed=self.executed+1
+        ran=ran+1
+        self.stats.lastLabel=entry.label or "unlabelled"
+        if elapsed>(self.stats.slowestSeconds or 0) then
+          self.stats.slowestSeconds=elapsed
+          self.stats.slowestLabel=entry.label or "unlabelled"
+        end
       end
     end
 

@@ -8,27 +8,206 @@ local function Settings()
   return QuestieOcto.MinimapSettings
 end
 
-local function NextRandom(seed)
-  seed=math.mod(seed*214013+2531011,4294967296)
-  local value=math.mod(math.floor(seed/65536),32768)/32767
-  return seed,value
+local hashColorCache={}
+local questPaletteCache={}
+
+local objectiveColorModeOffset={
+  default=1,
+  protan=4,
+  deutan=7,
+  tritan=10,
+  highContrast=13,
+}
+
+local function OptimizedQuestColor(id,mode)
+  local palette=QuestieOcto.ObjectiveColorPalette
+  local packed=palette and palette[id]
+  if not packed then return nil end
+
+  local offset=objectiveColorModeOffset[mode] or 1
+  local r=string.byte(packed,offset)
+  local g=string.byte(packed,offset+1)
+  local b=string.byte(packed,offset+2)
+  if not r or not g or not b then return nil end
+  return r/255,g/255,b/255
 end
 
-local function SeedColor(seed)
-  seed=tonumber(seed) or 0
-  local r,g,b
-  seed,r=NextRandom(seed)
-  seed,g=NextRandom(seed)
-  seed,b=NextRandom(seed)
-  return 0.45+r/2,0.45+g/2,0.45+b/2
+local function HashColor(text)
+  text=tostring(text or "")
+  local cached=hashColorCache[text]
+  if cached then return cached[1],cached[2],cached[3] end
+
+  -- pfQuest-style full-range deterministic RGB hash. Questie-Octo keys this
+  -- from the numeric quest ID rather than the localized quest title, so the
+  -- same quest keeps the same color on every client language.
+  local counter=1
+  local length=string.len(text)
+  local i
+  for i=1,length,3 do
+    counter=math.mod(counter*8161,4294967279)
+      +(string.byte(text,i)*16776193)
+      +((string.byte(text,i+1) or (length-i+256))*8372226)
+      +((string.byte(text,i+2) or (length-i+256))*3932164)
+  end
+
+  local hash=math.mod(math.mod(counter,4294967291),16777216)
+  local r=(hash-math.mod(hash,65536))/65536
+  local remainder=hash-r*65536
+  local g=(remainder-math.mod(remainder,256))/256
+  local b=remainder-g*256
+  r,g,b=r/255,g/255,b/255
+
+  hashColorCache[text]={r,g,b}
+  return r,g,b
+end
+
+-- Quest IDs created together are commonly sequential. Feeding their decimal
+-- strings directly into the old pfQuest-style RGB hash kept the leading bytes
+-- identical, which made batches such as Grim Reaches collapse into near-copy
+-- purple/pink/blue colors. Use the numeric quest ID as the stable identity and
+-- spread adjacent IDs around the hue wheel with a bitless integer permutation.
+-- 65521 is prime and 40494/65521 is a close rational approximation of the
+-- golden-ratio conjugate, so neighboring IDs are deliberately far apart. A
+-- later per-quest tie-break handles distant rational returns of this sequence.
+local function HSVToRGB(h,s,v)
+  h=math.mod(tonumber(h) or 0,1)
+  s=tonumber(s) or 0
+  v=tonumber(v) or 0
+
+  local scaled=h*6
+  local sector=math.floor(scaled)
+  local f=scaled-sector
+  local p=v*(1-s)
+  local q=v*(1-s*f)
+  local t=v*(1-s*(1-f))
+  sector=math.mod(sector,6)
+
+  if sector==0 then return v,t,p end
+  if sector==1 then return q,v,p end
+  if sector==2 then return p,v,t end
+  if sector==3 then return p,q,v end
+  if sector==4 then return t,p,v end
+  return v,p,q
+end
+
+local function Clamp01(v)
+  if v<0 then return 0 end
+  if v>1 then return 1 end
+  return v
+end
+
+local function QuestPaletteTieBreak(id,r,g,b)
+  -- Keep the 1.12 hue/saturation/value palette visually intact, but give each
+  -- quest a tiny independent RGB signature. The old secondary bands repeat
+  -- every 30 IDs and the hue sequence has close rational returns, so some
+  -- distant quest IDs could quantize to the exact same visible RGB value even
+  -- though their full-precision HSV values differed. The independent 65519
+  -- modular sequence changes each channel by at most two 8-bit steps.
+  local tone=math.mod(id*26367,65519)
+  local rStep=math.mod(tone,5)-2
+  local gStep=math.mod(math.floor(tone/5),5)-2
+  local bStep=math.mod(math.floor(tone/25),5)-2
+  return Clamp01(r+rStep/255),Clamp01(g+gStep/255),Clamp01(b+bStep/255)
+end
+
+local function AccessibilityTieBreak(id,r,g,b)
+  -- Accessibility remaps can collapse different base colors onto one display
+  -- RGB value after dark-color lifting and 8-bit output. A second, smaller
+  -- independent signature preserves map-local separation without changing the
+  -- character of the selected accessibility palette.
+  local tone=math.mod(id*58788,65519)
+  local rStep=math.mod(tone,5)-2
+  local gStep=math.mod(math.floor(tone/5),5)-2
+  local bStep=math.mod(math.floor(tone/25),5)-2
+  return Clamp01(r+rStep/510),Clamp01(g+gStep/510),Clamp01(b+bStep/510)
+end
+
+local function QuestPaletteColor(questID)
+  local id=tonumber(questID) or 0
+  id=math.floor(id)
+
+  local cached=questPaletteCache[id]
+  if cached then return cached[1],cached[2],cached[3] end
+
+  local hueIndex=math.mod(id*40494,65521)
+  local hue=hueIndex/65521
+
+  -- Small deterministic saturation/value bands add a second visual cue when
+  -- two non-neighboring IDs happen to land near one another on the hue wheel,
+  -- while keeping Full Nodes bright enough for dark World Map backgrounds.
+  local saturation=0.72+0.04*math.mod(id*17+3,6)
+  local value=0.88+0.03*math.mod(id*23+1,5)
+  local r,g,b=HSVToRGB(hue,saturation,value)
+  r,g,b=QuestPaletteTieBreak(id,r,g,b)
+
+  questPaletteCache[id]={r,g,b}
+  return r,g,b
+end
+
+-- Accessibility modes are deliberate color remaps, not simulations. The
+-- deterministic quest palette remains the identity source, so every quest keeps
+-- one stable color across map surfaces. The remaps route channel differences
+-- toward combinations intended for the selected color-vision family, then
+-- gently lift only very dark results.
+local function LiftDarkColor(r,g,b)
+  -- Simple sRGB luma is sufficient here: this is a tiny presentation guard,
+  -- not a contrast claim against every possible World Map background.
+  local y=0.299*r+0.587*g+0.114*b
+  if y>=0.37 then return r,g,b end
+  if y>=1 then return r,g,b end
+
+  local t=(0.37-y)/(1-y)
+  return r+(1-r)*t,g+(1-g)*t,b+(1-b)*t
+end
+
+local function AccessibleQuestColor(mode,r,g,b)
+  if mode=="protan" then
+    -- Red-deficient: preserve wide variation by moving the original channels
+    -- onto a blue/yellow-friendly ordering and inverting the two ambiguous
+    -- channels. Offline severe-protan validation selected this mapping.
+    r,g,b=b,1-g,1-r
+  elseif mode=="deutan" then
+    -- Green-deficient: rotate red into blue while retaining green directly.
+    r,g,b=b,g,r
+  elseif mode=="tritan" then
+    -- Blue-deficient: move the original blue/red information onto the
+    -- red/green-visible axes and invert the remaining green component.
+    r,g,b=b,r,1-g
+  elseif mode=="highContrast" then
+    -- General high-contrast mode keeps the full deterministic variety while
+    -- separating the original channels from the Default ordering.
+    r,g,b=r,b,1-g
+  else
+    return r,g,b
+  end
+
+  return LiftDarkColor(r,g,b)
 end
 
 function V:GetQuestColor(questID)
-  return SeedColor(tonumber(questID) or 0)
+  local id=math.floor(tonumber(questID) or 0)
+  local mode=Settings() and Settings():Get("objectiveColorVisionMode") or "default"
+
+  -- 1.17 uses an offline, same-map co-occurrence-aware palette for every
+  -- current quest that can produce a colorized objective marker. These are
+  -- final 8-bit display colors, optimized independently for each accessibility
+  -- mode so perceptually near-identical neighboring quests are avoided without
+  -- any runtime graph work or dynamic recoloring.
+  local r,g,b=OptimizedQuestColor(id,mode)
+  if r then return r,g,b end
+
+  -- Defensive fallback for future/unmapped quest IDs. Keep the deterministic
+  -- 1.15 palette so an unexpected objective still receives one stable color.
+  r,g,b=QuestPaletteColor(id)
+  if mode=="default" then return r,g,b end
+  r,g,b=AccessibleQuestColor(mode,r,g,b)
+  return AccessibilityTieBreak(id,r,g,b)
 end
 
 function V:GetObjectiveColor(questID,objectiveIndex)
-  return SeedColor((tonumber(questID) or 0)+32768*(tonumber(objectiveIndex) or 0))
+  -- Retained for compatibility with older internal callers. Current objective
+  -- presentation intentionally uses GetQuestColor so one quest = one color.
+  return HashColor("objective"..tostring(tonumber(questID) or 0)..":"..tostring(tonumber(objectiveIndex) or 0))
 end
 
 function V:IsObjectiveRole(role)
@@ -101,7 +280,9 @@ function V:ApplyPin(pin,node,isMinimap,alpha)
   if pin.texture then pin.texture:SetVertexColor(r,g,b,alpha) end
 
   if objective and glowEnabled and pin.glowTexture then
-    local gr,gg,gb=self:GetObjectiveColor(node.questID,node.objectiveIndex)
+    -- Clustered glow/contour follows the quest color too: one quest keeps
+    -- one stable color across every objective, on map and minimap.
+    local gr,gg,gb=self:GetQuestColor(node.questID)
     pin.glowR,pin.glowG,pin.glowB=gr,gg,gb
     pin.glowTexture:SetVertexColor(gr,gg,gb,alpha)
     self:ResizeGlow(pin)
@@ -118,8 +299,10 @@ function V:ApplyFullNode(pin,node,isMinimap,alpha)
   -- Full Nodes use pfQuest's native 14px baseline and 15% transparency;
   -- the user's only size control is the global map/minimap scale.
   alpha=(tonumber(alpha) or 1)*0.85
+  -- Full Nodes use the same wide per-quest color directly. Do not darken
+  -- it again: pfQuest already relies on alpha/texture shape for subduing the
+  -- node, and multiplying the wider palette would make dark colors vanish.
   local r,g,b=self:GetQuestColor(node.questID)
-  r,g,b=r*0.72,g*0.72,b*0.72
   pin.iconR,pin.iconG,pin.iconB=r,g,b
   pin.texture:SetTexture("Interface\\AddOns\\Questie-Octo\\UI\\Icons\\pfquest_node")
   pin.texture:SetVertexColor(r,g,b,alpha)

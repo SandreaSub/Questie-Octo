@@ -18,6 +18,7 @@ R.searching=R.searching or false
 R.searchGeneration=R.searchGeneration or 0
 R.rowCount=18
 R.rowHeight=19
+R.directQuestIDs=R.directQuestIDs
 
 local function FormatQuestText(text)
   if not text or text=="" then return nil end
@@ -141,6 +142,27 @@ function R:RebuildResults()
   local query=string.lower(self.query or "")
   local wanted=self.statusFilter or "all"
 
+  -- Shift-clicking a map/minimap pin can open an exact, bounded set of quests
+  -- represented by that physical marker. Keep this separate from text search so
+  -- several quests on one NPC/object pin can all be shown without fuzzy matches.
+  if self.directQuestIDs and table.getn(self.directQuestIDs)>0 then
+    local matches={}
+    local seen={}
+    for i=1,table.getn(self.directQuestIDs) do
+      local id=tonumber(self.directQuestIDs[i])
+      if id and id>0 and not seen[id] then
+        seen[id]=true
+        local title=QuestieOcto.DatabaseAPI:GetQuestTitle(id)
+        local raw=QuestieOcto.DatabaseAPI:GetQuestRaw(id)
+        if raw and title then
+          table.insert(matches,{id=id,title=title,status=QuestStatus(id)})
+        end
+      end
+    end
+    FinalizeMatches(self,matches,table.getn(matches),generation)
+    return
+  end
+
   if query=="" and wanted=="all" then
     self.selectedQuestID=nil
     self:RefreshWindow(false)
@@ -207,11 +229,13 @@ function R:RebuildResults()
 end
 
 function R:SetQuery(value)
+  self.directQuestIDs=nil
   self.query=value or ""
   self:RebuildResults()
 end
 
 function R:SetStatusFilter(value)
+  self.directQuestIDs=nil
   self.statusFilter=value or "all"
   self:RebuildResults()
 end
@@ -220,6 +244,7 @@ function R:GetStatusText()
   if not QuestieOcto.DatabaseAPI or not QuestieOcto.DatabaseAPI:IsReady() then return "Quest database is still loading." end
   if not QuestieOcto.Completion or not QuestieOcto.Completion.ready then return "Completed-quest history is still loading." end
   if self.searching then return "Searching quest database..." end
+  if self.directQuestIDs and table.getn(self.directQuestIDs)>0 then return "Quests at this marker: "..tostring(self.resultCount or table.getn(self.directQuestIDs)).."." end
   if (self.query or "")=="" and (self.statusFilter or "all")=="all" then return "Type a quest name/ID, or choose Available / Active / Completed." end
   if self.searchTruncated or self.resultCount>self.maxResults then return "Matching quests: "..self.maxResults.."+ (showing first "..self.maxResults..")." end
   return "Matching quests: "..self.resultCount.."."
@@ -452,11 +477,17 @@ local function MakeFilterButton(parent,label,value,x)
 end
 
 function R:OpenWindowNow()
-  if self.frame then self.frame:Show(); self.frame:Raise(); self:RefreshRows(); return end
+  if self.frame then
+    -- WorldMapFrame lives on FULLSCREEN. Keep the browser above it when opened
+    -- from a map/minimap Shift-click, while remaining below TOOLTIP strata.
+    self.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    self.frame:SetFrameLevel(100)
+    self.frame:Show(); self.frame:Raise(); self:RefreshRows(); return
+  end
 
   local f=CreateFrame("Frame","QuestieOctoQuestBrowser",UIParent)
   f:SetWidth(800); f:SetHeight(590); f:SetPoint("CENTER",UIParent,"CENTER",0,20)
-  f:SetFrameStrata("DIALOG"); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
+  f:SetFrameStrata("FULLSCREEN_DIALOG"); f:SetFrameLevel(100); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart",function() this:StartMoving() end); f:SetScript("OnDragStop",function() this:StopMovingOrSizing() end)
   f:SetBackdrop({bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",tile=true,tileSize=32,edgeSize=32,insets={left=11,right=12,top=12,bottom=11}})
   f:SetBackdropColor(0.04,0.04,0.04,0.97)
@@ -539,7 +570,84 @@ function R:OpenWindowNow()
   self:RefreshRows()
 end
 
+-- Open the Quest Browser directly on one known quest. Map/minimap Shift-click
+-- uses an exact numeric search so the selected quest is unambiguous even when
+-- several quests share the same localized title.
+function R:OpenQuest(questID)
+  questID=tonumber(questID)
+  if not questID or questID<=0 then return false end
+  if not QuestieOcto.QuestModel or not QuestieOcto.QuestModel:Get(questID) then return false end
+
+  self.directQuestIDs=nil
+  self.query=tostring(questID)
+  self.statusFilter="all"
+  self.selectedQuestID=questID
+
+  QuestieOcto.Scheduler:After(0.03,function()
+    local options=QuestieOcto.Options
+    if options then
+      options.openedFromGameMenu=false
+      if options.Hide then options:Hide() end
+      if options.configFrame and options.configFrame.frame then options.configFrame.frame:Hide() end
+    end
+    if GameMenuFrame and GameMenuFrame:IsShown() then
+      if HideUIPanel then HideUIPanel(GameMenuFrame) else GameMenuFrame:Hide() end
+    end
+
+    R:OpenWindowNow()
+    if R.searchBox then R.searchBox:SetText(R.query or "") end
+    R:RebuildResults()
+  end,"quest-browser-open-quest")
+  return true
+end
+
+-- Open the Quest Browser on every quest represented by one physical map/minimap
+-- marker. This is an exact result set, not a title/ID search, so shared NPC or
+-- object pins expose all of their quests without pulling in unrelated matches.
+function R:OpenQuests(questIDs,selectedQuestID)
+  if not questIDs then return false end
+
+  local ids={}
+  local seen={}
+  for i=1,table.getn(questIDs) do
+    local id=tonumber(questIDs[i])
+    if id and id>0 and not seen[id] and QuestieOcto.QuestModel and QuestieOcto.QuestModel:Get(id) then
+      seen[id]=true
+      ids[table.getn(ids)+1]=id
+    end
+  end
+  if table.getn(ids)==0 then return false end
+  if table.getn(ids)==1 then return self:OpenQuest(ids[1]) end
+
+  self.directQuestIDs=ids
+  self.query=""
+  self.statusFilter="all"
+
+  selectedQuestID=tonumber(selectedQuestID)
+  if not selectedQuestID or not seen[selectedQuestID] then selectedQuestID=ids[1] end
+  self.selectedQuestID=selectedQuestID
+
+  QuestieOcto.Scheduler:After(0.03,function()
+    local options=QuestieOcto.Options
+    if options then
+      options.openedFromGameMenu=false
+      if options.Hide then options:Hide() end
+      if options.configFrame and options.configFrame.frame then options.configFrame.frame:Hide() end
+    end
+    if GameMenuFrame and GameMenuFrame:IsShown() then
+      if HideUIPanel then HideUIPanel(GameMenuFrame) else GameMenuFrame:Hide() end
+    end
+
+    R:OpenWindowNow()
+    if R.searchBox then R.searchBox:SetText("") end
+    R:RebuildResults()
+  end,"quest-browser-open-quests")
+  return true
+end
+
 function R:OpenWindow()
+  -- A normal browser open leaves any previous map-marker exact-result mode.
+  self.directQuestIDs=nil
   -- AceConfig refreshes the options frame after an execute callback returns.
   -- Defer the entire handoff, suppress GameMenu return, then close Options.
   QuestieOcto.Scheduler:After(0.03,function()

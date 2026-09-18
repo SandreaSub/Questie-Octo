@@ -2,7 +2,7 @@
 ## Title: Questie-Octo
 ## Notes: Quest helper.
 ## Author: Questie-Octo
-## Version: 1.0.92
+## Version: 1.34
 ## SavedVariables: QuestieOctoGlobalDB
 ## SavedVariablesPerCharacter: QuestieOctoDB
 
@@ -10,6 +10,8 @@ QuestieOcto.lua
 Core\Scheduler.lua
 API\ClassicAPI.lua
 Map\KarazhanContext.lua
+Map\GnomereganContext.lua
+Map\SharedInstanceContext.lua
 
 Data\runtime\init.lua
 Data\runtime\quests.lua
@@ -30,7 +32,9 @@ Data\runtime\finalize.lua
 Data\EventSchedule.lua
 Data\CalendarEventRules.lua
 Data\QuestRewards.lua
+Data\QuestObjectiveRequirements.lua
 Data\ScriptedEncounters.lua
+Data\ObjectiveColorPalette.lua
 
 Database\LegacyPFDB.lua
 Database\Database.lua

@@ -162,6 +162,44 @@ function A:GetMapAreaIDForTexture(textureName)
   return ids and tonumber(ids[textureName]) or nil
 end
 
+-- Resolve a localized World Map zone label through WorldMapArea.dbc rather
+-- than through every AreaTable row. Some dungeon names legitimately exist in
+-- AreaTable more than once (for example Razorfen Kraul is both the instance
+-- area 491 and an outdoor Barrens sub-area 1717), so a generic name lookup
+-- must remain ambiguous. The World Map art table is narrower: when exactly one
+-- map-backed AreaTable ID owns that localized name it is safe to select it.
+-- Build this tiny reverse index lazily from ClassicAPI's already-cached live
+-- client tables; no packaged English names or hardcoded dungeon IDs are used.
+function A:GetWorldMapAreaIDByName(name)
+  if type(name)~="string" or name=="" then return nil end
+
+  if not self.worldMapAreaNameIndexLoaded then
+    self.worldMapAreaNameIndexLoaded=true
+    local index={}
+    local areas=self:GetClientAreas() or {}
+    local mapAreaIDs=self:GetMapAreaIDs() or {}
+
+    for _,rawAreaID in pairs(mapAreaIDs) do
+      local areaID=tonumber(rawAreaID)
+      local areaName=areaID and areas[areaID] or nil
+      if type(areaName)=="string" and areaName~="" then
+        local previous=index[areaName]
+        if previous==nil then
+          index[areaName]=areaID
+        elseif previous~=areaID then
+          index[areaName]=false
+        end
+      end
+    end
+
+    self.worldMapAreaNameIndex=index
+  end
+
+  local areaID=self.worldMapAreaNameIndex and self.worldMapAreaNameIndex[name] or nil
+  if type(areaID)=="number" then return areaID end
+  return nil
+end
+
 function A:GetDisplayedMapTextureName()
   if type(GetMapInfo)~="function" then return nil end
   local ok,textureName=pcall(GetMapInfo)

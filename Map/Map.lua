@@ -98,8 +98,11 @@ M.syncing=false
 M.resync=false
 M.prune=false
 M.frames={}
+M.framePool={}
 M.activeFrames={}
 M.buildActiveFrames=nil
+M.trackerHoverQuestID=nil
+M.trackerHoverFadeAlpha=0.30
 M.renderedPreparedPlan=nil
 M.syncPreparedPlan=nil
 M.renderedNodeRevision=0
@@ -272,7 +275,7 @@ local function ApplyVisualRole(pin,node)
     if pin.SetFrameLevel and WorldMapButton then
       pin:SetFrameLevel(WorldMapButton:GetFrameLevel()+7+FrameLevelBandForRole(node.role))
     end
-    if QuestieOcto.Visuals then QuestieOcto.Visuals:ApplyPin(pin,node,false,1) end
+    if QuestieOcto.Visuals then QuestieOcto.Visuals:ApplyPin(pin,node,false,pin.trackerHoverAlpha or 1) end
   end
 end
 
@@ -344,6 +347,73 @@ local function IsExactRole(role)
   return role=="available" or role=="turnin" or IsPermanentRole(role)
 end
 
+local function IsTrackerHoverObjectiveRole(role)
+  return role=="objectiveCreature" or role=="objectiveObject"
+      or role=="objectiveItemSource" or role=="objectiveArea"
+end
+
+local function TrackerHoverAlphaForPin(pin,questID)
+  questID=tonumber(questID)
+  if not pin or not questID then return 1 end
+
+  -- Item-start areas and any pin containing a non-objective semantic entry are
+  -- protected: pickup/turn-in/service/special markers must never be dimmed just
+  -- because an active objective happens to share their coordinate.
+  if pin.itemStartArea then return 1 end
+
+  local hasObjective=false
+  local hasProtected=false
+  local containsHovered=false
+  for _,entry in pairs(pin.entries or {}) do
+    local node=entry and entry.node
+    if node then
+      if IsTrackerHoverObjectiveRole(node.role) then
+        hasObjective=true
+        if tonumber(node.questID)==questID then containsHovered=true end
+      else
+        hasProtected=true
+      end
+    end
+  end
+
+  -- A clustered/shared objective pin containing the hovered quest remains fully
+  -- visible. Other objective-only pins fade, while any non-objective semantic
+  -- marker remains untouched.
+  if containsHovered or hasProtected or not hasObjective then return 1 end
+  return M.trackerHoverFadeAlpha or 0.30
+end
+
+function M:ApplyTrackerHoverToPin(pin)
+  if not pin then return end
+  local alpha=TrackerHoverAlphaForPin(pin,self.trackerHoverQuestID)
+  if pin.trackerHoverAlpha==alpha then return end
+  pin.trackerHoverAlpha=alpha
+  if QuestieOcto.Visuals then QuestieOcto.Visuals:SetAlpha(pin,alpha) end
+end
+
+function M:RefreshTrackerHoverFocus()
+  local seen={}
+  for _,pin in pairs(self.activeFrames or {}) do
+    if pin and not seen[pin] then
+      seen[pin]=true
+      self:ApplyTrackerHoverToPin(pin)
+    end
+  end
+  for _,pin in pairs(self.buildActiveFrames or {}) do
+    if pin and not seen[pin] then
+      seen[pin]=true
+      self:ApplyTrackerHoverToPin(pin)
+    end
+  end
+end
+
+function M:SetTrackerHoverQuest(questID)
+  questID=tonumber(questID)
+  if self.trackerHoverQuestID==questID then return end
+  self.trackerHoverQuestID=questID
+  self:RefreshTrackerHoverFocus()
+end
+
 local function EntryKey(node)
   return tostring(node.questID)..":"..tostring(node.role)..":"..
     tostring(node.sourceKind)..":"..tostring(node.sourceID)..":"..tostring(node.itemID or 0)
@@ -379,9 +449,54 @@ local function UpdatePosition(pin,x,y,offsetX,offsetY)
   )
 end
 
+local function DisplayedZoneLabel()
+  -- The current FrameXML keeps the selected zone label in the native dropdown
+  -- even for instance/detail maps whose continent tuple is nonstandard. Use it
+  -- only when a real zone selection exists; the global World overview clears
+  -- the zone selection, so stale text cannot override the World guard.
+  local zid=GetCurrentMapZone and tonumber(GetCurrentMapZone()) or nil
+  if not zid or zid<=0 then return nil end
+  if type(UIDropDownMenu_GetText)~="function" or not WorldMapZoneDropDown then return nil end
+  local ok,name=pcall(UIDropDownMenu_GetText,WorldMapZoneDropDown)
+  if ok and type(name)=="string" and name~="" then return name end
+  return nil
+end
+
+local function IsGlobalWorldOverview()
+  -- The rendered texture is authoritative. During a rapid zone -> continent ->
+  -- World transition the native continent tuple can still be stale, while
+  -- GetMapInfo() already reports "World". Conversely, instance/detail maps on
+  -- this client can use continent IDs above CONTINENTS_LENGTH, so that sentinel
+  -- must never override a concrete non-World texture.
+  local textureName=QuestieOcto.API and QuestieOcto.API.GetDisplayedMapTextureName
+    and QuestieOcto.API:GetDisplayedMapTextureName() or nil
+  if textureName then return textureName=="World" end
+
+  -- If GetMapInfo() is temporarily unavailable, a selected native zone label
+  -- that uniquely owns WorldMapArea art is still sufficient to prove this is a
+  -- real zone/instance map rather than the global overview.
+  local selectedName=DisplayedZoneLabel()
+  if selectedName and QuestieOcto.API and QuestieOcto.API.GetWorldMapAreaIDByName
+     and QuestieOcto.API:GetWorldMapAreaIDByName(selectedName) then
+    return false
+  end
+
+  local cid=GetCurrentMapContinent and tonumber(GetCurrentMapContinent()) or nil
+  local maxContinents=tonumber(CONTINENTS_LENGTH)
+  if cid and maxContinents and cid>maxContinents then return true end
+
+  -- Native WorldMapFrame falls back to the World texture when GetMapInfo() is
+  -- unavailable and no selected map identity can be recovered. Fail closed in
+  -- that genuinely identity-less state.
+  if not cid or cid<=0 then return true end
+  return false
+end
+
 local function DisplayedMapID()
   local cid=GetCurrentMapContinent and GetCurrentMapContinent() or 0
   local zid=GetCurrentMapZone and GetCurrentMapZone() or 0
+
+  if IsGlobalWorldOverview() then return nil end
 
   -- ClassicAPI exposes WorldMapArea.dbc as texture-dir -> AreaTable ID. This is
   -- the authoritative way to distinguish custom instances/wings that share the
@@ -390,9 +505,13 @@ local function DisplayedMapID()
   local textureMapID=QuestieOcto.API and QuestieOcto.API.GetDisplayedMapAreaID
     and QuestieOcto.API:GetDisplayedMapAreaID() or nil
 
-  -- A continent overview also has a map texture. Do not mistake that texture
-  -- for a selected zone; preserve the dedicated continent projection path.
-  if cid and cid>0 and (not zid or zid<=0) then
+  -- A normal continent overview also has a map texture. Do not mistake that
+  -- texture for a selected zone; preserve the dedicated continent projection
+  -- path. Nonstandard continent IDs (> CONTINENTS_LENGTH) are used by real
+  -- instance/detail maps on this client and must continue into selected-map
+  -- resolution instead of being classified as a continent overview.
+  local maxContinents=tonumber(CONTINENTS_LENGTH)
+  if cid and cid>0 and (not maxContinents or cid<=maxContinents) and (not zid or zid<=0) then
     local continentMapID=QuestieOcto.ContinentProjection
       and QuestieOcto.ContinentProjection:GetClientContinentMapID(cid) or nil
     if textureMapID and continentMapID~=nil and tonumber(textureMapID)~=tonumber(continentMapID) then
@@ -403,11 +522,24 @@ local function DisplayedMapID()
 
   if textureMapID then return tonumber(textureMapID) end
 
-  -- Vanilla selected-zone fallback: localized zone name -> canonical DB map ID.
-  if not cid or cid<=0 or not zid or zid<=0 or not GetMapZones then return nil end
-  local zones={GetMapZones(cid)}
-  local name=zones[zid]
+  -- Selected-zone fallback. Prefer the native dropdown's current label because
+  -- instance/detail maps are not guaranteed to be enumerable through
+  -- GetMapZones(continentID). The WorldMapArea-backed reverse index accepts the
+  -- name only when exactly one real map-art owner has that localized name.
+  local name=DisplayedZoneLabel()
+  local worldMapAreaID=name and QuestieOcto.API and QuestieOcto.API.GetWorldMapAreaIDByName
+    and QuestieOcto.API:GetWorldMapAreaIDByName(name) or nil
+  if worldMapAreaID then return tonumber(worldMapAreaID) end
+
+  -- Ordinary Vanilla zone fallback when the native dropdown text is not
+  -- available. A generic AreaTable lookup remains last because duplicate names
+  -- intentionally fail closed there.
+  if not name and cid and cid>0 and zid and zid>0 and GetMapZones then
+    local zones={GetMapZones(cid)}
+    name=zones[zid]
+  end
   if not name then return nil end
+
   if QuestieOcto.DatabaseAPI.GetMapIDByName then
     return QuestieOcto.DatabaseAPI:GetMapIDByName(name)
   end
@@ -415,6 +547,7 @@ local function DisplayedMapID()
 end
 
 local function DisplayedContinentMapID()
+  if IsGlobalWorldOverview() then return nil end
   local cid=GetCurrentMapContinent and GetCurrentMapContinent() or 0
   local zid=GetCurrentMapZone and GetCurrentMapZone() or 0
   if not cid or cid<=0 or (zid and zid>0) then return nil end
@@ -430,27 +563,37 @@ local function DisplayedContextKey()
   return nil
 end
 
-local function DisplayedSpecialMapContext(mapID)
+local function SharedMapContextModule(mapID)
+  local sharedInstances=QuestieOcto.SharedInstanceContext
+  if sharedInstances and sharedInstances:IsSharedArea(mapID) then return sharedInstances end
   local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(mapID) then
-    return karazhan:GetDisplayedContext(mapID)
-  end
+  if karazhan and karazhan:IsSharedArea(mapID) then return karazhan end
+  local gnomeregan=QuestieOcto.GnomereganContext
+  if gnomeregan and gnomeregan:IsSharedArea(mapID) then return gnomeregan end
   return nil
 end
 
-local function NodeAllowedOnDisplayedMap(node)
-  local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(M.mapID) then
-    return karazhan:NodeAllowed(node,M.specialMapContext)
+local function DisplayedSpecialMapContext(mapID)
+  local contextModule=SharedMapContextModule(mapID)
+  if contextModule then return contextModule:GetDisplayedContext(mapID) end
+  return nil
+end
+
+local function NodeAllowedOnDisplayedMap(node,x,y,preparedMapContext)
+  local contextModule=SharedMapContextModule(M.mapID)
+  if preparedMapContext then
+    return preparedMapContext==M.specialMapContext
   end
+  if contextModule then return contextModule:NodeAllowed(node,M.specialMapContext,x,y) end
   return true
 end
 
 local function ItemAreaAllowedOnDisplayedMap(area)
-  local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(M.mapID) then
-    return karazhan:ItemAreaAllowed(area,M.specialMapContext)
+  if area and area.preparedMapContext then
+    return area.preparedMapContext==M.specialMapContext
   end
+  local contextModule=SharedMapContextModule(M.mapID)
+  if contextModule then return contextModule:ItemAreaAllowed(area,M.specialMapContext) end
   return true
 end
 
@@ -490,17 +633,19 @@ local function AddTrackerTargetCoords(targets,seen,coords,sourceKind,sourceID)
       local y=tonumber(coord[2])
       local mapID=tonumber(coord[3])
       if x and y and mapID then
-        local karazhanContext=nil
-        local karazhan=QuestieOcto.KarazhanContext
-        if karazhan and karazhan:IsSharedArea(mapID) then
-          karazhanContext=karazhan:GetSourceContext(sourceKind,sourceID)
+        local specialMapContext=nil
+        local contextModule=SharedMapContextModule(mapID)
+        if contextModule then
+          specialMapContext=contextModule:GetSourceContext(sourceKind,sourceID,x,y,mapID)
         end
-        local key=tostring(mapID)..":"..tostring(karazhanContext or "")..":"..
+        local key=tostring(mapID)..":"..tostring(specialMapContext or "")..":"..
           string.format("%.3f",x)..":"..string.format("%.3f",y)
         if not seen[key] then
           seen[key]=true
           table.insert(targets,{
-            x=x,y=y,mapID=mapID,karazhanContext=karazhanContext,
+            x=x,y=y,mapID=mapID,specialMapContext=specialMapContext,
+            -- Retain the historical field for old Karazhan diagnostics/tests.
+            karazhanContext=specialMapContext,
             sourceKind=sourceKind,sourceID=tonumber(sourceID) or sourceID
           })
         end
@@ -672,9 +817,10 @@ end
 
 local function TrackerTargetMatches(target,mapID,specialContext)
   if not target or tonumber(target.mapID)~=tonumber(mapID) then return false end
-  local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(mapID) then
-    return specialContext~=nil and target.karazhanContext==specialContext
+  local contextModule=SharedMapContextModule(mapID)
+  if contextModule then
+    local targetContext=target.specialMapContext or target.karazhanContext
+    return specialContext~=nil and targetContext==specialContext
   end
   return true
 end
@@ -689,10 +835,9 @@ end
 
 local function TrackerTargetMapCounts(targets)
   local counts={}
-  local karazhan=QuestieOcto.KarazhanContext
   for _,target in pairs(targets or {}) do
     local mapID=tonumber(target.mapID)
-    if mapID and (not karazhan or not karazhan:IsSharedArea(mapID)) then
+    if mapID and not SharedMapContextModule(mapID) then
       counts[mapID]=(counts[mapID] or 0)+1
     end
   end
@@ -726,10 +871,8 @@ local function PhysicalTrackerMapContext()
   if not mapID then return nil,nil end
 
   local specialContext=nil
-  local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(mapID) then
-    specialContext=karazhan:GetPhysicalContext(mapID)
-  end
+  local contextModule=SharedMapContextModule(mapID)
+  if contextModule then specialContext=contextModule:GetPhysicalContext(mapID) end
   return mapID,specialContext
 end
 
@@ -737,24 +880,23 @@ local function IsTrackerMapSelectable(mapID,specialContext)
   mapID=tonumber(mapID)
   if not mapID then return false end
 
+  local contextModule=SharedMapContextModule(mapID)
   local displayed,displayedContext=VisibleTrackerMapContext()
   if displayed and displayed==mapID then
-    local karazhan=QuestieOcto.KarazhanContext
-    if not karazhan or not karazhan:IsSharedArea(mapID) then return true end
+    if not contextModule then return true end
     if specialContext and displayedContext==specialContext then return true end
   end
 
   local physical,physicalContext=PhysicalTrackerMapContext()
   if physical and physical==mapID then
-    local karazhan=QuestieOcto.KarazhanContext
-    if not karazhan or not karazhan:IsSharedArea(mapID) then return true end
+    if not contextModule then return true end
     if specialContext and physicalContext==specialContext then return true end
   end
 
-  local karazhan=QuestieOcto.KarazhanContext
-  if karazhan and karazhan:IsSharedArea(mapID) then
-    -- Interface 11200 cannot select Lower vs Upper Karazhan by AreaTable ID.
-    -- Only an already displayed or physically current context is safe.
+  if contextModule then
+    -- Interface 11200 cannot arbitrarily select one texture context when two
+    -- maps share one AreaTable ID. Only an already displayed or physically
+    -- current context is safe.
     return false
   end
 
@@ -763,11 +905,9 @@ local function IsTrackerMapSelectable(mapID,specialContext)
 end
 
 local function ChooseTrackerTargetMap(targets,zoneGroup)
-  local karazhan=QuestieOcto.KarazhanContext
-
   -- Respect a dungeon/detail map already being shown, including maps opened by
-  -- another addon. For AreaTable 3457, texture context must also match so a
-  -- Lower target can never be accepted merely because Upper is visible.
+  -- another addon. Shared AreaTable maps additionally require their exact
+  -- texture context so an objective can never be projected onto its sibling.
   local displayed,displayedContext=VisibleTrackerMapContext()
   if displayed and TrackerTargetCount(targets,displayed,displayedContext)>0 then
     return displayed,displayedContext
@@ -815,11 +955,10 @@ local function OpenTrackerTargetMap(mapID,specialContext)
   -- If another addon/native action already has the dungeon/detail map open, do
   -- not retarget it through a zone-name fallback. Karazhan's shared numeric ID
   -- additionally requires the exact Lower/Upper texture context.
+  local contextModule=SharedMapContextModule(mapID)
   local displayed,displayedContext=VisibleTrackerMapContext()
   if displayed and displayed==mapID then
-    local karazhan=QuestieOcto.KarazhanContext
-    if not karazhan or not karazhan:IsSharedArea(mapID)
-       or (specialContext and displayedContext==specialContext) then
+    if not contextModule or (specialContext and displayedContext==specialContext) then
       if M.RequestSync then M:RequestSync(true) end
       return true
     end
@@ -829,21 +968,16 @@ local function OpenTrackerTargetMap(mapID,specialContext)
   local currentInstance,currentInstanceContext=HiddenCurrentInstanceMapContext()
   local currentPhysical=false
   if physical and physical==mapID then
-    local karazhan=QuestieOcto.KarazhanContext
-    currentPhysical=(not karazhan or not karazhan:IsSharedArea(mapID))
-      or (specialContext and physicalContext==specialContext)
+    currentPhysical=(not contextModule) or (specialContext and physicalContext==specialContext)
   end
   if not currentPhysical and currentInstance and currentInstance==mapID then
-    local karazhan=QuestieOcto.KarazhanContext
-    currentPhysical=(not karazhan or not karazhan:IsSharedArea(mapID))
-      or (specialContext and currentInstanceContext==specialContext)
+    currentPhysical=(not contextModule) or (specialContext and currentInstanceContext==specialContext)
   end
 
   local continent=nil
   local zoneIndex=nil
   if not currentPhysical then
-    local karazhan=QuestieOcto.KarazhanContext
-    if karazhan and karazhan:IsSharedArea(mapID) then return false end
+    if contextModule then return false end
     continent,zoneIndex=FindSelectableWorldMapZone(mapID)
     if not continent or not zoneIndex then return false end
   end
@@ -892,17 +1026,82 @@ local function AttachWorldMapPinInput(pin)
   pin:RegisterForClicks("LeftButtonUp")
   pin:SetScript("OnEnter",function() QuestieOcto.Tooltips:Show(this) end)
   pin:SetScript("OnLeave",function() QuestieOcto.Tooltips:Hide(this) end)
-  -- Continent-map markers should behave as zone-entry targets instead of
-  -- swallowing the click that would otherwise select the zone underneath.
-  pin:SetScript("OnClick",function() OpenContinentZoneForPin(this) end)
+  -- Shift + Left Click opens the quest represented by the hovered pin directly
+  -- in Questie-Octo's Quest Browser. Ordinary clicks retain the established
+  -- continent-map zone-entry behavior.
+  pin:SetScript("OnClick",function()
+    if arg1=="LeftButton" and IsShiftKeyDown and IsShiftKeyDown() then
+      local research=QuestieOcto.QuestResearch
+      local tooltips=QuestieOcto.Tooltips
+      local questIDs=tooltips and tooltips.GetQuestIDs and tooltips:GetQuestIDs(this) or nil
+      local questID=tooltips and tooltips.GetPrimaryQuestID and tooltips:GetPrimaryQuestID(this) or tonumber(this.questID)
+      if research and questID then
+        QuestieOcto.Tooltips:Hide(this)
+        if questIDs and table.getn(questIDs)>1 and research.OpenQuests then
+          if research:OpenQuests(questIDs,questID) then return end
+        elseif research.OpenQuest and research:OpenQuest(questID) then
+          return
+        end
+      end
+    end
+    OpenContinentZoneForPin(this)
+  end)
 end
 
-function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
-  if not IsRoleEnabled(node.role) or not IsPvPQuestNodeEnabled(node) then return nil end
+local function ResetPooledWorldMapPin(pin)
+  if not pin then return end
+  if pin:IsShown() then pin:Hide() end
+  pin:ClearAllPoints()
+  pin.seenGeneration=nil
+  pin.entryGeneration=nil
+  pin.entries=nil
+  pin.itemStartArea=nil
+  pin.displayName=nil
+  pin.clusterCount=nil
+  pin.visualPriority=nil
+  pin.role=nil
+  pin.questID=nil
+  pin.sourceID=nil
+  pin.event=nil
+  pin.pvp=nil
+  pin.repeatable=nil
+  pin.fullNode=nil
+  pin.fullNodeNode=nil
+  pin.iconScaleKey=nil
+  pin.sourceKind=nil
+  pin.continentZoneMapID=nil
+  pin.x=nil
+  pin.y=nil
+  pin.offsetX=nil
+  pin.offsetY=nil
+  pin.trackerHoverAlpha=nil
+  if QuestieOcto.Visuals then QuestieOcto.Visuals:ClearPin(pin,1) end
+end
 
+local function AcquireWorldMapPin(self,key)
   local pin=self.frames[key]
+  if pin then
+    self.stats.reused=self.stats.reused+1
+    return pin
+  end
 
-  if not pin then
+  local pool=self.framePool or {}
+  self.framePool=pool
+  local count=table.getn(pool)
+
+  -- Lua 5.0's table.insert/table.remove maintain a separate list size used by
+  -- table.getn(). Popping with pool[count]=nil leaves that size stale, which
+  -- can make a later getn() report a slot whose frame is already nil. Use
+  -- table.remove() for the stack pop, and drain any stale empty tail slots
+  -- left by older pool state before falling back to creating a fresh pin.
+  while count>0 and not pin do
+    pin=table.remove(pool,count)
+    count=count-1
+  end
+
+  if pin then
+    self.stats.reused=self.stats.reused+1
+  else
     pin=CreateFrame("Button",nil,WorldMapButton)
     pin:SetWidth(16)
     pin:SetHeight(16)
@@ -911,14 +1110,42 @@ function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
     local tex=pin:CreateTexture(nil,"OVERLAY")
     tex:SetAllPoints(pin)
     pin.texture=tex
-
     AttachWorldMapPinInput(pin)
-
-    self.frames[key]=pin
     self.stats.created=self.stats.created+1
-  else
-    self.stats.reused=self.stats.reused+1
   end
+
+  pin.frameKey=key
+  self.frames[key]=pin
+  return pin
+end
+
+function M:RecycleUnusedFrames(generation)
+  for key,pin in pairs(self.frames or {}) do
+    if pin and pin.seenGeneration~=generation then
+      self.frames[key]=nil
+      pin.frameKey=nil
+      ResetPooledWorldMapPin(pin)
+      table.insert(self.framePool,pin)
+    end
+  end
+end
+
+function M:RecycleAllFrames()
+  local old=self.frames or {}
+  self.frames={}
+  for _,pin in pairs(old) do
+    if pin then
+      pin.frameKey=nil
+      ResetPooledWorldMapPin(pin)
+      table.insert(self.framePool,pin)
+    end
+  end
+end
+
+function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
+  if not IsRoleEnabled(node.role) or not IsPvPQuestNodeEnabled(node) then return nil end
+
+  local pin=AcquireWorldMapPin(self,key)
 
   pin.itemStartArea=nil
   if pin.seenGeneration~=generation then
@@ -956,10 +1183,11 @@ function M:GetOrCreate(key,node,x,y,clusterCount,generation,kind)
       pin.fullNodeNode=node
     end
     if QuestieOcto.Visuals and QuestieOcto.Visuals.ApplyFullNode then
-      QuestieOcto.Visuals:ApplyFullNode(pin,pin.fullNodeNode,false,1)
+      QuestieOcto.Visuals:ApplyFullNode(pin,pin.fullNodeNode,false,pin.trackerHoverAlpha or 1)
     end
   end
   self:ResizePin(pin)
+  self:ApplyTrackerHoverToPin(pin)
 
   if not pin:IsShown() then pin:Show() end
 
@@ -994,9 +1222,10 @@ local function RefreshPinVisual(pin)
   end
   pin.fullNodeNode=fullNode
   if fullNode and QuestieOcto.Visuals and QuestieOcto.Visuals.ApplyFullNode then
-    QuestieOcto.Visuals:ApplyFullNode(pin,fullNode,false,1)
+    QuestieOcto.Visuals:ApplyFullNode(pin,fullNode,false,pin.trackerHoverAlpha or 1)
   end
   M:ResizePin(pin)
+  M:ApplyTrackerHoverToPin(pin)
 end
 
 function M:RemoveQuest(questID)
@@ -1044,12 +1273,27 @@ function M:RemoveQuest(questID)
 end
 
 function M:HideAll()
-  for _,pin in pairs(self.activeFrames or {}) do
-    if pin:IsShown() then
-      pin:Hide()
-      self.stats.hidden=self.stats.hidden+1
+  -- A map change can interrupt an asynchronous zone/continent render after
+  -- some new pins have already been shown but before Finish() promotes them to
+  -- activeFrames. Hide both the last completed set and that unpublished build
+  -- set so invalidating a generation can never strand visible pins on the next
+  -- map texture. The same frame can exist in both lists when it is being reused,
+  -- so de-duplicate before counting/hiding it.
+  local seen={}
+  local function hideList(list)
+    for _,pin in pairs(list or {}) do
+      if pin and not seen[pin] then
+        seen[pin]=true
+        if pin:IsShown() then
+          pin:Hide()
+          M.stats.hidden=M.stats.hidden+1
+        end
+      end
     end
   end
+
+  hideList(self.activeFrames)
+  hideList(self.buildActiveFrames)
   self.activeFrames={}
   self.buildActiveFrames=nil
   self.stats.active=0
@@ -1106,8 +1350,7 @@ end
 
 function M:SetMap(mapID,specialContext)
   mapID=tonumber(mapID)
-  local karazhan=QuestieOcto.KarazhanContext
-  if not karazhan or not karazhan:IsSharedArea(mapID) then specialContext=nil end
+  if not SharedMapContextModule(mapID) then specialContext=nil end
   if tonumber(self.mapID)==mapID and self.specialMapContext==specialContext then return end
   self.mapID=mapID
   self.specialMapContext=specialContext
@@ -1120,6 +1363,9 @@ function M:SetMap(mapID,specialContext)
   self.continentPhysicalRegistry=nil
   self.continentItemAreaRegistry=nil
   self:HideAll()
+  -- Frames are generic presentation objects. Recycle the previous map context
+  -- instead of retaining one keyed frame forever for every zone ever browsed.
+  self:RecycleAllFrames()
 end
 
 function M:RenderItemStartArea(area,generation,continentZoneMapID)
@@ -1132,25 +1378,7 @@ function M:RenderItemStartArea(area,generation,continentZoneMapID)
   local itemRepeatable=itemQuest and itemQuest.presentationRepeatable or false
 
   local key="itemarea:"..tostring(area.key)
-  local pin=self.frames[key]
-
-  if not pin then
-    pin=CreateFrame("Button",nil,WorldMapButton)
-    pin:SetWidth(16)
-    pin:SetHeight(16)
-    pin:SetFrameLevel(WorldMapButton:GetFrameLevel()+8)
-
-    local tex=pin:CreateTexture(nil,"OVERLAY")
-    tex:SetAllPoints(pin)
-    pin.texture=tex
-
-    AttachWorldMapPinInput(pin)
-
-    self.frames[key]=pin
-    self.stats.created=self.stats.created+1
-  else
-    self.stats.reused=self.stats.reused+1
-  end
+  local pin=AcquireWorldMapPin(self,key)
 
   if pin.seenGeneration~=generation then
     pin.seenGeneration=generation
@@ -1168,6 +1396,7 @@ function M:RenderItemStartArea(area,generation,continentZoneMapID)
   pin.iconScaleKey=nil
   pin.sourceKind="area"
   pin.displayName=area.displayName
+  pin.trackerHoverAlpha=1
   pin.clusterCount=area.n
   pin.texture:SetTexture(TextureForNode({role="itemStart",questID=area.questID,event=pin.event,pvp=pin.pvp,repeatable=pin.repeatable}))
   pin.texture:SetDrawLayer("OVERLAY",5)
@@ -1199,8 +1428,17 @@ function M:RenderNode(node,generation)
     kind="itemStart"
   end
 
+  local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,self.mapID)
+  local contextModule=SharedMapContextModule(self.mapID)
+  if contextModule then
+    local filtered={}
+    for _,p in pairs(points) do
+      if NodeAllowedOnDisplayedMap(node,p.x,p.y) then table.insert(filtered,p) end
+    end
+    points=filtered
+  end
+
   if IsExactRole(node.role) then
-    local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,self.mapID)
     for _,p in pairs(points) do
       local key="exact:"..tostring(node.sourceKind)..":"..tostring(node.sourceID)..":"..
         string.format("%.2f",p.x)..":"..string.format("%.2f",p.y)
@@ -1209,7 +1447,6 @@ function M:RenderNode(node,generation)
     return
   end
 
-  local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,self.mapID)
   local areas=QuestieOcto.Clustering:BuildAreas(points,radius)
 
   for _,area in pairs(areas) do
@@ -1263,9 +1500,14 @@ function M:Finish(generation,doPrune)
     end
   end
 
+  -- Keep only keys used by this authoritative render. Hidden obsolete pins are
+  -- returned to a generic pool, so long sessions do not retain every historic
+  -- zone/continent pin and its old node references.
+  self:RecycleUnusedFrames(generation)
   self.activeFrames=nextActive
   self.buildActiveFrames=nil
   ResetVisibleOffsets(generation,self.activeFrames)
+  self:RefreshTrackerHoverFocus()
 
   local active=0
   local visibleAvailable=0
@@ -1321,7 +1563,7 @@ function M:RenderPreparedDescriptor(desc,generation,renderItemStarts)
 
   if desc.type=="nodeSlot" then
     for _,entry in pairs(desc.entries or {}) do
-      if entry.node and NodeAllowedOnDisplayedMap(entry.node)
+      if entry.node and NodeAllowedOnDisplayedMap(entry.node,desc.x,desc.y,desc.preparedMapContext)
          and (renderItemStarts or entry.node.role~="itemStart") then
         M:GetOrCreate(
           desc.key,
@@ -1339,7 +1581,7 @@ function M:RenderPreparedDescriptor(desc,generation,renderItemStarts)
 
   -- Backward compatibility for a prepared map published by an older cache
   -- during an in-session update/reload boundary.
-  if desc.type=="node" and desc.node and NodeAllowedOnDisplayedMap(desc.node)
+  if desc.type=="node" and desc.node and NodeAllowedOnDisplayedMap(desc.node,desc.x,desc.y,desc.preparedMapContext)
      and (renderItemStarts or desc.node.role~="itemStart") then
     M:GetOrCreate(desc.key,desc.node,desc.x,desc.y,desc.clusterCount or 1,generation,desc.kind or "objective")
   end
@@ -2007,7 +2249,7 @@ function M:RequestSync(doPrune)
   end,"map-sync")
 end
 
-function M:PatchContinentQuests(changedQuests)
+function M:PatchContinentQuests(mapSet,changedQuests)
   if not WorldMapFrame or not WorldMapFrame:IsVisible() then return false end
   local continentMapID=DisplayedContinentMapID()
   if continentMapID==nil or not QuestieOcto.ContinentProjection then return false end
@@ -2076,17 +2318,36 @@ function M:PatchContinentQuests(changedQuests)
   ClearChangedContinentItemAreas(self.continentItemAreaRegistry,changed)
 
   local mapIDs=QuestieOcto.ContinentProjection:GetZoneMapIDs(continentMapID)
-  for _,mapID in ipairs(mapIDs or {}) do
+  local continentMaps={}
+  for _,mapID in ipairs(mapIDs or {}) do continentMaps[tonumber(mapID)]=true end
+
+  -- NODES_CHANGED already carries the union of the changed quests' old and new
+  -- map memberships. Restrict incremental continent work to that set rather
+  -- than walking every zone on the displayed continent for one local change.
+  local affected={}
+  if mapSet and next(mapSet) then
+    for rawMapID in pairs(mapSet) do
+      local mapID=tonumber(rawMapID)
+      if mapID and continentMaps[mapID] then table.insert(affected,mapID) end
+    end
+    table.sort(affected)
+  else
+    for _,mapID in ipairs(mapIDs or {}) do table.insert(affected,mapID) end
+  end
+
+  for _,mapID in ipairs(affected) do
     local rareGroups={}
     local mapNodes=QuestieOcto.Nodes:GetMapNodes(mapID) or {}
+    local changedNodes={}
     for _,node in pairs(mapNodes) do
       if changed[tonumber(node.questID)] then
+        table.insert(changedNodes,node)
         if not AddContinentRareItemStart(rareGroups,node,mapID) then
           self:RenderContinentNode(node,mapID,self.generation,self.continentPhysicalRegistry)
         end
       end
     end
-    RenderContinentItemStartAreas(mapNodes,mapID,self.generation,self.continentItemAreaRegistry,changed)
+    RenderContinentItemStartAreas(changedNodes,mapID,self.generation,self.continentItemAreaRegistry,changed)
     RenderContinentRareItemStarts(rareGroups,mapID,self.generation,self.continentItemAreaRegistry)
   end
 
@@ -2117,6 +2378,7 @@ function M:PatchContinentQuests(changedQuests)
   end
   self.activeFrames=active
   ResetVisibleOffsets(self.generation,self.activeFrames)
+  self:RefreshTrackerHoverFocus()
 
   local visibleAvailable,visibleItemStart,visibleObjective,visibleTurnin=0,0,0,0
   for _,pin in pairs(self.activeFrames) do
@@ -2177,7 +2439,7 @@ function M:OnNodesChanged(mapSet,changedQuests)
   -- changed quest relationships directly instead of starting a full re-render.
   if DisplayedMapID() then return end
   if DisplayedContinentMapID()~=nil then
-    if not self:PatchContinentQuests(changedQuests) then self:RequestSync(true) end
+    if not self:PatchContinentQuests(mapSet,changedQuests) then self:RequestSync(true) end
   end
 end
 

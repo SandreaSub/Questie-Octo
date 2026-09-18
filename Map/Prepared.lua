@@ -68,7 +68,47 @@ local function FullPointKey(prefix,node,x,y)
   return "full:quest:"..string.format("%.2f",x)..":"..string.format("%.2f",y)
 end
 
-local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key)
+local function ContextualKey(key,context)
+  if not context then return key end
+  return tostring(key)..":context:"..tostring(context)
+end
+
+local function SharedPreparationContextResolver(mapID)
+  local shared=QuestieOcto.SharedInstanceContext
+  if not shared or not shared:IsSharedArea(mapID) then return nil end
+
+  return function(node,x,y)
+    return shared:GetSourceContext(
+      node and node.sourceKind,node and node.sourceID,x,y,mapID
+    )
+  end
+end
+
+local function PointGroupsForNode(node,mapID,contextResolver)
+  local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
+  if not contextResolver then return {{points=points}} end
+
+  local byContext={}
+  local _,point
+  for _,point in pairs(points or {}) do
+    local context=contextResolver(node,point.x,point.y)
+    if context then
+      local group=byContext[context]
+      if not group then
+        group={context=context,points={}}
+        byContext[context]=group
+      end
+      table.insert(group.points,point)
+    end
+  end
+
+  local groups={}
+  for _,group in pairs(byContext) do table.insert(groups,group) end
+  table.sort(groups,function(a,b) return tostring(a.context)<tostring(b.context) end)
+  return groups
+end
+
+local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key,preparedMapContext)
   local slot=slots[key]
   if not slot then
     slot={
@@ -77,10 +117,18 @@ local function AddNormal(plan,slots,node,x,y,clusterCount,kind,key)
       y=y,
       key=key,
       coordKey=string.format("%.2f:%.2f",x,y),
+      preparedMapContext=nil,
       entries={}
     }
     slots[key]=slot
     table.insert(plan,slot)
+  end
+
+  if preparedMapContext then
+    if slot.preparedMapContext and slot.preparedMapContext~=preparedMapContext then
+      return
+    end
+    slot.preparedMapContext=preparedMapContext
   end
 
   table.insert(slot.entries,{
@@ -96,35 +144,39 @@ function P:BuildPlanFromNodes(mapID,nodes)
 
   local plan={}
   local slots={}
+  local contextResolver=SharedPreparationContextResolver(mapID)
 
   for _,node in pairs(nodes or {}) do
     if node.role~="itemStart" then
+      local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+
       if ExactRole(node.role) then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"exact",
-            DescriptorKey(node,point.x,point.y)
-          )
-        end
-      else
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-
-        if QuestieOcto.MinimapSettings:Get("objectiveNodeDensity")=="full" then
-          for _,point in pairs(points) do
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(DescriptorKey(node,point.x,point.y),group.context)
             AddNormal(
-              plan,slots,node,point.x,point.y,1,"objectiveFull",
-              FullPointKey("objective-full",node,point.x,point.y)
+              plan,slots,node,point.x,point.y,1,"exact",key,group.context
             )
           end
-        else
+        end
+      elseif QuestieOcto.MinimapSettings:Get("objectiveNodeDensity")=="full" then
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("objective-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"objectiveFull",key,group.context
+            )
+          end
+        end
+      else
+        for _,group in pairs(pointGroups) do
           local areas=QuestieOcto.Clustering:BuildAreas(
-            points,QuestieOcto.Clustering.objectiveRadius
+            group.points,QuestieOcto.Clustering.objectiveRadius
           )
 
           for _,area in pairs(areas) do
-            AddNormal(plan,slots,node,area.x,area.y,area.n,"objective",AreaKey(node,area))
+            local key=ContextualKey(AreaKey(node,area),group.context)
+            AddNormal(plan,slots,node,area.x,area.y,area.n,"objective",key,group.context)
           end
         end
       end
@@ -134,21 +186,24 @@ function P:BuildPlanFromNodes(mapID,nodes)
   if QuestieOcto.MinimapSettings:Get("itemStartDensity")=="full" then
     for _,node in pairs(nodes or {}) do
       if node.role=="itemStart" then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"itemStartFull",
-            FullPointKey("itemstart-full",node,point.x,point.y)
-          )
+        local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("itemstart-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"itemStartFull",key,group.context
+            )
+          end
         end
       end
     end
   else
-    local itemAreas=QuestieOcto.ItemStartAreas:BuildForMap(nodes or {},mapID)
+    local itemAreas=QuestieOcto.ItemStartAreas:BuildForMap(nodes or {},mapID,nil,contextResolver)
     for _,area in pairs(itemAreas) do
       table.insert(plan,{
         type="itemStartArea",
         area=area,
+        preparedMapContext=area.preparedMapContext,
         key="itemarea:"..tostring(area.key)
       })
     end
@@ -175,38 +230,46 @@ function P:BuildWorldItemStartPlanFromNodes(mapID,nodes)
   local plan={}
   local slots={}
   local density=QuestieOcto.MinimapSettings:Get("itemStartDensity")
+  local contextResolver=SharedPreparationContextResolver(mapID)
 
   if density=="full" then
     for _,node in pairs(nodes or {}) do
       if node.role=="itemStart" and not IsWorldMapUltraRareItemStart(node) then
-        local points=QuestieOcto.Clustering:PointsForNodeOnMap(node,mapID)
-        for _,point in pairs(points) do
-          AddNormal(
-            plan,slots,node,point.x,point.y,1,"itemStartFull",
-            FullPointKey("itemstart-full",node,point.x,point.y)
-          )
+        local pointGroups=PointGroupsForNode(node,mapID,contextResolver)
+        for _,group in pairs(pointGroups) do
+          for _,point in pairs(group.points or {}) do
+            local key=ContextualKey(FullPointKey("itemstart-full",node,point.x,point.y),group.context)
+            AddNormal(
+              plan,slots,node,point.x,point.y,1,"itemStartFull",key,group.context
+            )
+          end
         end
       end
     end
   else
     local normalAreas=QuestieOcto.ItemStartAreas:BuildForMap(
       nodes or {},mapID,
-      function(node) return not IsWorldMapUltraRareItemStart(node) end
+      function(node) return not IsWorldMapUltraRareItemStart(node) end,
+      contextResolver
     )
     for _,area in pairs(normalAreas) do
       table.insert(plan,{
         type="itemStartArea",
         area=area,
+        preparedMapContext=area.preparedMapContext,
         key="itemarea:"..tostring(area.key)
       })
     end
   end
 
-  local rareAreas=QuestieOcto.ItemStartAreas:BuildZoneWideRareForMap(nodes or {},mapID)
+  local rareAreas=QuestieOcto.ItemStartAreas:BuildZoneWideRareForMap(
+    nodes or {},mapID,contextResolver
+  )
   for _,area in pairs(rareAreas) do
     table.insert(plan,{
       type="itemStartArea",
       area=area,
+      preparedMapContext=area.preparedMapContext,
       key="itemrarearea:"..tostring(area.key)
     })
   end
@@ -214,6 +277,7 @@ function P:BuildWorldItemStartPlanFromNodes(mapID,nodes)
   table.sort(plan,function(a,b) return tostring(a.key)<tostring(b.key) end)
   return plan
 end
+
 
 function P:SetPreparedMap(mapID,plan,worldItemStartPlan,densitySignature)
   mapID=tonumber(mapID)
@@ -308,48 +372,114 @@ local function RemoveQuestFromDescriptor(desc,questID)
   return false,0
 end
 
+
+local function RemoveChangedFromDescriptor(desc,changed)
+  if not desc then return false,0 end
+
+  if desc.type=="itemStartArea" and desc.area then
+    if changed[tonumber(desc.area.questID)] then return true,1 end
+    return false,0
+  end
+
+  if desc.type=="nodeSlot" then
+    local kept={}
+    local removed=0
+    for _,entry in pairs(desc.entries or {}) do
+      if entry.node and changed[tonumber(entry.node.questID)] then
+        removed=removed+1
+      else
+        table.insert(kept,entry)
+      end
+    end
+    desc.entries=kept
+    return table.getn(kept)==0,removed
+  end
+
+  if desc.type=="node" and desc.node and changed[tonumber(desc.node.questID)] then
+    return true,1
+  end
+
+  return false,0
+end
+
+local function QuestRemovalMapSet(self,questID)
+  -- Nodes already maintains the authoritative reverse quest -> map index used
+  -- by incremental map patches. Reuse it here instead of introducing another
+  -- persistent PreparedMap index/table just for immediate quest removals.
+  local nodes=QuestieOcto.Nodes
+  if nodes and nodes.ready and nodes.questMaps then
+    local indexed=nodes.questMaps[questID]
+    if indexed and next(indexed) then return indexed,true end
+
+    -- Once Nodes is authoritative, an absent reverse entry is an authoritative
+    -- empty set. This is also the normal duplicate-event case after the first
+    -- removal already cleared the quest. Do not fall back to a global sweep.
+    return {},true
+  end
+
+  -- Startup/race compatibility: before semantic Nodes are authoritative, keep
+  -- the historical full-cache sweep rather than risking stale prepared pins.
+  return self.cache,false
+end
+
 function P:RemoveQuest(questID)
   questID=tonumber(questID)
   if not questID then return 0 end
+
+  local mapSet,indexed=QuestRemovalMapSet(self,questID)
+  local removed=0
+  local droppedDescriptors=0
+
+  for rawMapID in pairs(mapSet or {}) do
+    local mapID=tonumber(rawMapID)
+    local plan=mapID and self.cache[mapID] or nil
+    if plan then
+      local filtered={}
+      local before=table.getn(plan)
+      for _,desc in pairs(plan) do
+        local drop,count=RemoveQuestFromDescriptor(desc,questID)
+        removed=removed+(count or 0)
+        if not drop then table.insert(filtered,desc) end
+      end
+      self.cache[mapID]=filtered
+      droppedDescriptors=droppedDescriptors+before-table.getn(filtered)
+    end
+
+    local worldPlan=mapID and self.worldItemStartCache[mapID] or nil
+    if worldPlan then
+      local filtered={}
+      for _,desc in pairs(worldPlan) do
+        local drop,count=RemoveQuestFromDescriptor(desc,questID)
+        removed=removed+(count or 0)
+        if not drop then table.insert(filtered,desc) end
+      end
+      self.worldItemStartCache[mapID]=filtered
+    end
+  end
+
+  -- A second compatibility event for the same turn-in can arrive after the
+  -- immediate removal. Once the quest metadata is already gone, return without
+  -- another global revision bump/recount. The first removal did the real work.
+  if removed==0 then return 0 end
 
   self.stateRevision=self.stateRevision+1
   self.stats.stateRevision=self.stateRevision
   self.stats.revisionBumps=(self.stats.revisionBumps or 0)+1
   self.stats.currentReady=false
-  self.lastRevisionReason="quest-remove"
+  self.lastRevisionReason=indexed and "quest-remove-local" or "quest-remove-fallback"
 
-  local removed=0
-  for mapID,plan in pairs(self.cache) do
-    local filtered={}
-    for _,desc in pairs(plan or {}) do
-      local drop,count=RemoveQuestFromDescriptor(desc,questID)
-      removed=removed+(count or 0)
-      if not drop then table.insert(filtered,desc) end
-    end
-
-    self.cache[mapID]=filtered
-    if self.readyMaps[mapID] then
-      self.cacheRevision[mapID]=self.stateRevision
-    end
+  -- stateRevision is global cache validity metadata, so ready maps still need
+  -- their revision stamp advanced. This is O(number of prepared maps) but does
+  -- not inspect or allocate their descriptor plans.
+  for mapID in pairs(self.readyMaps or {}) do
+    self.cacheRevision[mapID]=self.stateRevision
+    self.worldItemStartRevision[mapID]=self.stateRevision
   end
 
-  for mapID,plan in pairs(self.worldItemStartCache or {}) do
-    local filtered={}
-    for _,desc in pairs(plan or {}) do
-      local drop,count=RemoveQuestFromDescriptor(desc,questID)
-      removed=removed+(count or 0)
-      if not drop then table.insert(filtered,desc) end
-    end
-    self.worldItemStartCache[mapID]=filtered
-    if self.readyMaps[mapID] then self.worldItemStartRevision[mapID]=self.stateRevision end
-  end
-
-  -- `descriptors` counts coordinate slots, not quest references, in the new
-  -- pfQuest-style prepared representation. Recalculate cheaply after an
-  -- immediate quest removal rather than subtracting removed metadata entries.
-  local descriptorCount=0
-  for _,plan in pairs(self.cache) do descriptorCount=descriptorCount+table.getn(plan or {}) end
-  self.stats.descriptors=descriptorCount
+  -- `descriptors` counts coordinate slots in the normal prepared cache. We know
+  -- exactly how many slots disappeared from the affected maps, so avoid the old
+  -- second full-cache recount.
+  self.stats.descriptors=math.max(0,(self.stats.descriptors or 0)-droppedDescriptors)
   if self.stats.currentMap and self.readyMaps[self.stats.currentMap] then
     self.stats.currentReady=true
   end
@@ -579,27 +709,41 @@ function P:PatchMaps(mapSet,changedQuests)
         local byKey={}
         for _,desc in pairs(existing) do
           local candidate=ClonePreparedDescriptor(desc)
-          local drop=false
-          for questID in pairs(changed) do
-            local remove=RemoveQuestFromDescriptor(candidate,questID)
-            if remove then drop=true end
-          end
+          local drop=RemoveChangedFromDescriptor(candidate,changed)
           if not drop then
             table.insert(plan,candidate)
             byKey[DescriptorKeyValue(candidate)]=candidate
           end
         end
 
+        -- Scan the affected map's canonical nodes once, regardless of how many
+        -- quests changed. The old descriptor loop multiplied every descriptor
+        -- by every changed quest.
         local changedNodes={}
         for _,node in pairs(QuestieOcto.Nodes:GetMapNodes(mapID) or {}) do
           if changed[tonumber(node.questID)] then table.insert(changedNodes,node) end
         end
         local delta=P:BuildPlanFromNodes(mapID,changedNodes) or {}
         for _,desc in pairs(delta) do MergePreparedDescriptor(byKey,plan,desc) end
-
         table.sort(plan,function(a,b) return DescriptorKeyValue(a)<DescriptorKeyValue(b) end)
-        local allNodes=QuestieOcto.Nodes:GetMapNodes(mapID)
-        local worldItemStartPlan=P:BuildWorldItemStartPlanFromNodes(mapID,allNodes) or {}
+
+        -- Item-start geographic areas are quest-specific. Patch only the
+        -- changed quests here as well instead of rebuilding every item-start
+        -- area on the map for a local availability/objective change.
+        local worldItemStartPlan={}
+        local worldByKey={}
+        for _,desc in pairs(P:GetWorldItemStarts(mapID) or {}) do
+          local candidate=ClonePreparedDescriptor(desc)
+          local drop=RemoveChangedFromDescriptor(candidate,changed)
+          if not drop then
+            table.insert(worldItemStartPlan,candidate)
+            worldByKey[DescriptorKeyValue(candidate)]=candidate
+          end
+        end
+        local worldDelta=P:BuildWorldItemStartPlanFromNodes(mapID,changedNodes) or {}
+        for _,desc in pairs(worldDelta) do MergePreparedDescriptor(worldByKey,worldItemStartPlan,desc) end
+        table.sort(worldItemStartPlan,function(a,b) return DescriptorKeyValue(a)<DescriptorKeyValue(b) end)
+
         P:SetPreparedMap(mapID,plan,worldItemStartPlan,CurrentDensitySignature())
       end
     end

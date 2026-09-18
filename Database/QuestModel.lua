@@ -72,7 +72,22 @@ local NORMAL_REPEATABLE_PRESENTATION={
   [3861]=true,
 }
 
-local function AddObjectiveData(list,kind,id)
+local function ObjectiveRequirementCount(questID,kind,id)
+  local all=QuestieOcto.QuestObjectiveRequirements
+  local quest=all and all[tonumber(questID)] or nil
+  if not quest then return nil end
+
+  local bucket=nil
+  if kind=="creature" then bucket=quest.U
+  elseif kind=="gameObject" then bucket=quest.O
+  elseif kind=="item" then bucket=quest.I end
+  local count=bucket and bucket[tonumber(id)] or nil
+  count=tonumber(count)
+  if count and count>0 then return count end
+  return nil
+end
+
+local function AddObjectiveData(list,kind,id,questID)
   if not id then return end
 
   local typ=nil
@@ -84,7 +99,8 @@ local function AddObjectiveData(list,kind,id)
   table.insert(list,{
     kind=kind,
     type=typ,
-    id=id
+    id=id,
+    required=ObjectiveRequirementCount(questID,kind,id)
   })
 end
 
@@ -94,26 +110,44 @@ local function BuildObjectiveData(questID,objectives)
 
   if itemFirst then
     for i=1,table.getn(objectives.item or {}) do
-      AddObjectiveData(result,"item",objectives.item[i])
+      AddObjectiveData(result,"item",objectives.item[i],questID)
     end
   end
 
   -- Questie 3.3.5/7/8 DB compiler category order.
   for i=1,table.getn(objectives.creature or {}) do
-    AddObjectiveData(result,"creature",objectives.creature[i])
+    AddObjectiveData(result,"creature",objectives.creature[i],questID)
   end
 
   for i=1,table.getn(objectives.gameObject or {}) do
-    AddObjectiveData(result,"gameObject",objectives.gameObject[i])
+    AddObjectiveData(result,"gameObject",objectives.gameObject[i],questID)
   end
 
   if not itemFirst then
     for i=1,table.getn(objectives.item or {}) do
-      AddObjectiveData(result,"item",objectives.item[i])
+      AddObjectiveData(result,"item",objectives.item[i],questID)
     end
   end
 
   return result
+end
+
+local function IsLevelPlusQuestType(questType)
+  questType=tonumber(questType)
+  return questType==1 or questType==62 or questType==81
+end
+
+function QM:HasLevelPlus(questID,nativeTag)
+  -- The native Quest Log tag remains authoritative whenever the client
+  -- supplies one. Some Turtle custom quests have stale client/server type
+  -- metadata, however, while Questie-Octo carries an audited Type 1/62/81
+  -- projection for map presentation. Reuse that same projection for the
+  -- Quest Log and tracker so every surface shows a consistent [level+] cue.
+  if nativeTag and nativeTag~="" then return true end
+  questID=tonumber(questID)
+  if not questID then return false end
+  local q=self:Get(questID)
+  return q and IsLevelPlusQuestType(q.questType) or false
 end
 
 function QM:Clear()

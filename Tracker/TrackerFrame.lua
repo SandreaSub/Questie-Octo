@@ -332,6 +332,36 @@ function T:ScrollBy(delta)
   self:LayoutVisibleRows()
 end
 
+function T:SetTrackerHoverQuest(questID)
+  questID=tonumber(questID)
+  if questID and not (QuestieOcto.QuestLog and QuestieOcto.QuestLog.active and QuestieOcto.QuestLog.active[questID]) then
+    questID=nil
+  end
+  if self.hoverQuestID==questID then return end
+  self.hoverQuestID=questID
+
+  if QuestieOcto.Map and QuestieOcto.Map.SetTrackerHoverQuest then
+    QuestieOcto.Map:SetTrackerHoverQuest(questID)
+  end
+  if QuestieOcto.Minimap and QuestieOcto.Minimap.SetTrackerHoverQuest then
+    QuestieOcto.Minimap:SetTrackerHoverQuest(questID)
+  end
+end
+
+local function ShowBasicQuestRowTooltip(row)
+  if not row or not row.questID or not GameTooltip then return end
+  -- Rebuild from a hidden/cleared frame. This prevents a previously expanded
+  -- full-detail hover from leaving GameTooltip at a stale oversized width.
+  GameTooltip:Hide()
+  if GameTooltip.ClearLines then GameTooltip:ClearLines() end
+  GameTooltip:SetOwner(row,"ANCHOR_LEFT")
+  GameTooltip:SetText(row.questTitle or "Quest",1,0.82,0)
+  GameTooltip:AddLine("Click to open this quest in the Quest Log.",1,1,1)
+  GameTooltip:AddLine("Right click for quest options.",1,1,1)
+  GameTooltip:AddLine("Shift + Click to stop tracking it.",0.7,0.7,0.7)
+  GameTooltip:Show()
+end
+
 local function EnsureRow(index,parent)
   local row=T.rows[index]
   if row then
@@ -351,15 +381,12 @@ local function EnsureRow(index,parent)
 
   row:SetScript("OnEnter",function()
     if this.questID then
-      GameTooltip:SetOwner(this,"ANCHOR_LEFT")
-      GameTooltip:SetText(this.questTitle or "Quest",1,0.82,0)
-      GameTooltip:AddLine("Click to open this quest in the Quest Log.",1,1,1)
-      GameTooltip:AddLine("Right click for quest options.",1,1,1)
-      GameTooltip:AddLine("Shift + Click to stop tracking it.",0.7,0.7,0.7)
-      GameTooltip:Show()
+      T:SetTrackerHoverQuest(this.questID)
+      ShowBasicQuestRowTooltip(this)
     end
   end)
   row:SetScript("OnLeave",function()
+    T:SetTrackerHoverQuest(nil)
     if GameTooltip then GameTooltip:Hide() end
   end)
   row:RegisterForClicks("LeftButtonUp","RightButtonUp")
@@ -739,9 +766,10 @@ function T:Render()
 
     local prefix=""
     if quest.level and tonumber(quest.level) and tonumber(quest.level)>0 then
-      -- Match pfQuest's Vanilla tracker convention: the native quest-log tag
-      -- adds a '+' inside the level brackets, e.g. [40+].
-      prefix="["..tostring(quest.level)..(quest.tag and "+" or "").."] "
+      -- Match the Quest Log/map convention: native tags remain authoritative,
+      -- with the audited compiled Type 1/62/81 projection filling gaps for
+      -- custom quests whose native Quest Log tag is missing.
+      prefix="["..tostring(quest.level)..(quest.levelPlus and "+" or "").."] "
     end
     local title=tostring(quest.title or "Quest")
     if quest.failed then
@@ -1078,6 +1106,7 @@ function T:CreateFrame()
   frame:SetResizable(false)
   if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
   frame:SetScript("OnMouseWheel",function() T:ScrollBy(arg1) end)
+  frame:SetScript("OnHide",function() T:SetTrackerHoverQuest(nil) end)
   frame:SetScript("OnUpdate",function()
     T.timerElapsed=(T.timerElapsed or 0)+(arg1 or 0)
     if T.timerElapsed>=1 then

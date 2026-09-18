@@ -24,6 +24,7 @@ load("Data/pfDB/overwrites-octo.lua")
 load("Data/PvPQuestTypes.lua")
 load("Data/EliteQuestTypes.lua")
 load("Data/pfDB/enrichment.lua")
+load("Data/ScriptedEncounters.lua")
 
 local DATASETS={"items","quests","quests-itemreq","objects","units","zones","professions","areatrigger","refloot","minimap","meta"}
 local TEXT_DATASETS={"items","quests","objects","units","zones","professions"}
@@ -324,7 +325,14 @@ for _,questID in ipairs(questIDs) do
     if questID==3861 and tonumber(id)==620 then
       indexCoords({{55.6,30.9,40,300}},questID)
     else
-      indexCoords(runtimeUnits[id] and runtimeUnits[id].coords,questID)
+      local coords=runtimeUnits[id] and runtimeUnits[id].coords or nil
+      if not coords or not next(coords) then
+        local scripted=QuestieOcto.ScriptedEncounterData and QuestieOcto.ScriptedEncounterData[tonumber(id)] or nil
+        if scripted and (not scripted.roles or scripted.roles.available) then
+          coords=scripted.coords or coords
+        end
+      end
+      indexCoords(coords,questID)
     end
   end
   for _,id in pairs(start and start.O or {}) do indexCoords(runtimeObjects[id] and runtimeObjects[id].coords,questID) end

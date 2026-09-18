@@ -218,7 +218,11 @@ local function StyleButton(button,index)
   if Settings():Get("questLogShowLevels") then
     local numericLevel=tonumber(level)
     local levelText=numericLevel and tostring(numericLevel) or "??"
-    local groupTag=(tag and tag~="") and "+" or ""
+    local hasLevelPlus=(tag and tag~="") and true or false
+    if QuestieOcto.QuestModel and QuestieOcto.QuestModel.HasLevelPlus then
+      hasLevelPlus=QuestieOcto.QuestModel:HasLevelPlus(questID,tag)
+    end
+    local groupTag=hasLevelPlus and "+" or ""
     text="["..levelText..groupTag.."] "..title
   end
   if button.SetText then button:SetText(text) end

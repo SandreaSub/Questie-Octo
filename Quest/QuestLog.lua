@@ -850,9 +850,10 @@ function QL:Refresh(fastRefresh)
             logIndex=index,
             title=title,
             level=level,
-            -- Vanilla/pfQuest uses GetQuestLogTitle().tag as the live elite
-            -- marker. Preserve it with the quest instead of reclassifying
-            -- quests from database metadata.
+            -- Preserve GetQuestLogTitle().tag as native quest-state truth.
+            -- Presentation surfaces may fill a missing [level+] cue from the
+            -- audited compiled Type 1/62/81 projection, but this field remains
+            -- exactly what the client reported.
             tag=tag,
             zoneGroup=zoneGroup,
             collapsed=false,
