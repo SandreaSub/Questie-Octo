@@ -174,13 +174,14 @@ local function StarterFactionAllowsPlayerRaw(raw)
   return not sawDirectStarter
 end
 
-local function PrerequisitesSatisfiedRaw(raw)
+function A:PrerequisitesSatisfiedRaw(questID,raw)
   local pre=raw and raw["pre"] or nil
   local preActive=raw and raw["preActive"] or nil
   local preAll=raw and raw["preAll"] or nil
   if not pre and not preActive and not preAll then return true end
 
   local satisfied=false
+  local hasRequirement=false
   local activeSet=nil
   local allSet=nil
 
@@ -188,6 +189,7 @@ local function PrerequisitesSatisfiedRaw(raw)
     activeSet={}
     for _,id in pairs(preActive) do
       activeSet[id]=true
+      hasRequirement=true
       if QuestieOcto.QuestLog:IsOnQuest(id) then satisfied=true end
     end
   end
@@ -196,22 +198,35 @@ local function PrerequisitesSatisfiedRaw(raw)
     allSet={}
     for _,group in pairs(preAll) do
       local groupComplete=true
+      local groupHasRequirement=false
       for _,id in pairs(group) do
         allSet[id]=true
+        groupHasRequirement=true
+        hasRequirement=true
         if not QuestieOcto.Completion:IsRewardedForPrerequisite(id) then groupComplete=false end
       end
-      if groupComplete then satisfied=true end
+      if groupHasRequirement and groupComplete then satisfied=true end
     end
   end
 
   if pre then
     for _,id in pairs(pre) do
       if (not activeSet or not activeSet[id]) and (not allSet or not allSet[id]) then
-        if QuestieOcto.Completion:IsRewardedForPrerequisite(id) then satisfied=true end
+        -- pfQuest's historical `pre` contains some NextQuestInChain-only
+        -- breadcrumbs. Tortoise does not require those quests to be rewarded;
+        -- it blocks the successor only while such a breadcrumb is CURRENT.
+        -- That active-only lock is handled separately by IsBlockedByPrevChain.
+        local chainOnly=QuestieOcto.Progression and QuestieOcto.Progression.IsChainOnlyPredecessor
+          and QuestieOcto.Progression:IsChainOnlyPredecessor(questID,id)
+        if not chainOnly then
+          hasRequirement=true
+          if QuestieOcto.Completion:IsRewardedForPrerequisite(id) then satisfied=true end
+        end
       end
     end
   end
 
+  if not hasRequirement then return true end
   return satisfied
 end
 
@@ -275,8 +290,9 @@ function A:EvaluateQuest(questID,trackStats)
   end
 
   -- A later active/rewarded step can invalidate an unfinished introduction.
-  -- Use only the hand-audited nextChain or the strictly verified offline
-  -- single-chain projection, never generic prerequisite/OR graph traversal.
+  -- Recursive skip-ahead uses only the strict linear projection/authored links.
+  -- Complex server NextQuestInChain relations use a separate immediate-only
+  -- table and are never flattened into generic prerequisite/OR traversal.
   if not verifiedDarkmoon and QuestieOcto.Progression then
     local progressed,learned=QuestieOcto.Progression:HasProgressedPast(
       questID,tonumber(raw["nextChain"]),raw)
@@ -287,12 +303,20 @@ function A:EvaluateQuest(questID,trackStats)
     end
   end
 
+  -- Tortoise also builds a reverse prevChainQuests list from every
+  -- NextQuestInChain edge. A chain-only predecessor blocks this successor only
+  -- while that predecessor is currently in the Quest Log and not failed.
+  if not verifiedDarkmoon and QuestieOcto.Progression and QuestieOcto.Progression:IsBlockedByPrevChain(questID) then
+    Track(self,"prerequisite",trackStats)
+    return false,"prevChain"
+  end
+
   if not verifiedDarkmoon and BlockedByExclusiveRaw(raw,questID) then
     Track(self,"exclusive",trackStats)
     return false,"exclusive"
   end
 
-  if not verifiedDarkmoon and not PrerequisitesSatisfiedRaw(raw) then
+  if not verifiedDarkmoon and not self:PrerequisitesSatisfiedRaw(questID,raw) then
     Track(self,"prerequisite",trackStats)
     return false,"prerequisite"
   end
@@ -503,7 +527,10 @@ local function PrerequisiteSummary(q)
   end
 
   for _,id in pairs(q.preQuestSingle or {}) do
-    if not activeSet[id] and not allSet[id] and not QuestieOcto.Completion:IsRewardedForPrerequisite(id) then
+    local chainOnly=QuestieOcto.Progression and QuestieOcto.Progression.IsChainOnlyPredecessor
+      and QuestieOcto.Progression:IsChainOnlyPredecessor(q.id,id)
+    if not chainOnly and not activeSet[id] and not allSet[id]
+      and not QuestieOcto.Completion:IsRewardedForPrerequisite(id) then
       table.insert(alternatives,QuestLabel(id))
     end
   end
@@ -518,6 +545,20 @@ local function PrerequisiteSummary(q)
   if table.getn(combined)==0 then return "Prerequisite not met." end
   if table.getn(combined)==1 then return "Requires: "..combined[1].."." end
   return "Requires one of: "..table.concat(combined,"; ").."."
+end
+
+local function PrevChainSummary(questID)
+  local set=QuestieOcto.Progression and QuestieOcto.Progression.chainOnlyPrevByQuest
+    and QuestieOcto.Progression.chainOnlyPrevByQuest[tonumber(questID)] or nil
+  local blocked={}
+  for id in pairs(set or {}) do
+    local state=QuestieOcto.QuestLog.active and QuestieOcto.QuestLog.active[id] or nil
+    if state and not state.failed then table.insert(blocked,QuestLabel(id)) end
+  end
+  table.sort(blocked)
+  if table.getn(blocked)==1 then return "Finish or abandon: "..blocked[1].."." end
+  if table.getn(blocked)>1 then return "Finish or abandon these active chain quests: "..table.concat(blocked,", ").."." end
+  return "Blocked by an active earlier quest in this chain."
 end
 
 local function ReputationStanding(value)
@@ -543,6 +584,7 @@ function A:GetUnavailableReason(questID)
   if code=="active" then return "Already active." end
   if code=="completed" then return "Already completed." end
   if code=="nextChain" then return "Already progressed past this quest." end
+  if code=="prevChain" then return PrevChainSummary(q.id) end
   if code=="exclusive" then
     local blocked={}
     for _,id in pairs(q.exclusiveTo or {}) do

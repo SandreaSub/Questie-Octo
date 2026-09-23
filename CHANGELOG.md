@@ -1,5 +1,24 @@
 # Questie-Octo Changelog
 
+## 1.42
+- Corrected optional `NextQuestInChain` availability to match Tortoise in both directions: skipped breadcrumb quests no longer act as completion prerequisites for their follow-ups, while an actually active breadcrumb still blocks that follow-up until it is finished or abandoned.
+- Audited all 90 current chain-only relationships; 86 stale runtime prerequisite entries are now ignored only for completion gating, and four additional active-only chain locks are now represented explicitly. Real `PrevQuestId`/`NextQuestId` prerequisites remain unchanged.
+- Hardened recursive skipped-quest inference so authored optional links can never be pulled into recursive traversal after the first explicit edge. No quest is marked complete, and no polling, `OnUpdate`, SavedVariables, quest-giver, objective, map, or tracker system changed.
+
+## 1.41
+- Completed a second-pass audit of all 329 quest-chain relations deferred by 1.40, including the supplied Tortoise quest-availability code, Turtle SQL/updates, Questie 5.2.3/6.0.0, pfQuest ClassicAPI/Turtle, and targeted public pages for conflicting cases.
+- Added 323 corroborated `NextQuestInChain` relations as **immediate-only** visibility locks. They can hide an earlier unavailable quest when its direct successor is active/rewarded, but they are never recursively traversed through branches, exclusivity, events, or resettable chains.
+- Kept one relation already covered by authored data, two disabled relations archive-only, rejected the contradicted 1083 → 1084 and 41388 → 41389 links, and left 40749 → 40750 archive-only because the successor is absent from the loaded snapshot/runtime. No skipped quest is marked complete; no polling, `OnUpdate`, SavedVariables schema or quest-giver data changed.
+
+## 1.40
+- Audited all 1,822 archived Turtle quest-chain edges against supplied Questie 5.2.3, Questie 6.0.0, pfQuest ClassicAPI, pfQuest Turtle, server quest-template/update snapshots, and individually retrievable public pages; preserved an evidence matrix and remaining deferred cases in a source-only archive.
+- Restored only three separately corroborated optional introductions: Ironband's Excavation (436 → 297), Sergra Darkthorn (860 → 844), and Fiora Longears (1132 → 1133). These now disappear after the immediate follow-up becomes active/rewarded, including after skipped introductions.
+- Left 1,487 vetted generated links unchanged and kept the other uncertain, branched, repeatable and custom chains out of automatic promotion. No quest history, eligibility requirements, quest-giver changes, polling or SavedVariables edits.
+
+## 1.39
+- Restored the hand-audited optional breadcrumb relationship Trouble In Darkshore? (730) → The Absent Minded Prospector (729). Quest 729 has no server `PrevQuestId` because it can be taken without 730, so the conservative 1.38 projection correctly excluded it; a player report and independent quest-series descriptions confirm the introduction becomes unavailable after progression.
+- The existing completion/progression service now hides quest 730 when quest 729 is active or rewarded, including its cached ordinary completion-flag fallback. No generic prerequisite inference, quest completion fabrication, polling, or unrelated quest record changes.
+
 ## 1.38
 - Audited all 1,822 nonzero NextQuestInChain links in the supplied Turtle SQL snapshot against the 6,704 current compiled quests and the second, reciprocal SQL predecessor field. Promoted only 1,487 ordinary single-path links; archived the remaining 335 with explicit reasons. Preserved the two separately audited 1.37 introductory links without importing 38 weaker SQL-only breadcrumbs.
 - Added a compact offline-generated progression projection. A later active/rewarded quest can hide an earlier unfinished introduction along a vetted linear chain, even when intermediate quests were skipped. This is display-only: skipped quests are never marked completed and no server quest state is modified.
