@@ -1,5 +1,15 @@
 # Questie-Octo Changelog
 
+## 1.38
+- Audited all 1,822 nonzero NextQuestInChain links in the supplied Turtle SQL snapshot against the 6,704 current compiled quests and the second, reciprocal SQL predecessor field. Promoted only 1,487 ordinary single-path links; archived the remaining 335 with explicit reasons. Preserved the two separately audited 1.37 introductory links without importing 38 weaker SQL-only breadcrumbs.
+- Added a compact offline-generated progression projection. A later active/rewarded quest can hide an earlier unfinished introduction along a vetted linear chain, even when intermediate quests were skipped. This is display-only: skipped quests are never marked completed and no server quest state is modified.
+- Preserved repeatable/event/Hardcore/exclusive/branch behavior and existing direct-flag checks for the two audited 1.37 breadcrumbs. No new polling, OnUpdate, character DB writes or bulk completion-flag queries.
+
+## 1.37
+- Restored the missing reverse progression links for Mountaineer Stormpike's Task (1339 -> 1338) and Report to Mountaineer Rockgar (468 -> 455), verified against current supplied Turtle quest-template rows, reciprocal prerequisites, and classic player reports.
+- Introductory markers now disappear if their follow-up is active or completed. When the bulk completion cache is incomplete, the cached per-quest completion flag of an ordinary successor provides a narrow fallback.
+- Audited the wider failure class without bulk-importing historical chain edges; no changes to unrelated quest chains, repeatability, map logic, polling, or SavedVariables.
+
 ## 1.36
 - Audited all 83 tracked flight masters against the supplied server taxi/spawn snapshot and the current client TaxiNodes.dbc, including eight custom nodes absent from the server SQL.
 - Corrected Treggi (62624) at Slickwick Oil Rig to Horde-only flight service; the client taxi node does not have an Alliance mount.

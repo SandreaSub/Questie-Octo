@@ -274,10 +274,17 @@ function A:EvaluateQuest(questID,trackStats)
     return false,"completed"
   end
 
-  local nextChain=tonumber(raw["nextChain"])
-  if not verifiedDarkmoon and nextChain and QuestieOcto.Completion:HasBlockingStatus(nextChain) then
-    Track(self,"prerequisite",trackStats)
-    return false,"nextChain"
+  -- A later active/rewarded step can invalidate an unfinished introduction.
+  -- Use only the hand-audited nextChain or the strictly verified offline
+  -- single-chain projection, never generic prerequisite/OR graph traversal.
+  if not verifiedDarkmoon and QuestieOcto.Progression then
+    local progressed,learned=QuestieOcto.Progression:HasProgressedPast(
+      questID,tonumber(raw["nextChain"]),raw)
+    if learned then self.learnedCompletionFlag=true end
+    if progressed then
+      Track(self,"prerequisite",trackStats)
+      return false,"nextChain"
+    end
   end
 
   if not verifiedDarkmoon and BlockedByExclusiveRaw(raw,questID) then

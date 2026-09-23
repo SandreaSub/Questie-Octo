@@ -2,7 +2,7 @@
 ## Title: Questie-Octo
 ## Notes: Quest helper.
 ## Author: Questie-Octo
-## Version: 1.36
+## Version: 1.38
 ## SavedVariables: QuestieOctoGlobalDB
 ## SavedVariablesPerCharacter: QuestieOctoDB
 
@@ -34,6 +34,7 @@ Data\CalendarEventRules.lua
 Data\QuestRewards.lua
 Data\QuestObjectiveRequirements.lua
 Data\ScriptedEncounters.lua
+Data\QuestProgression.lua
 Data\ObjectiveColorPalette.lua
 
 Database\LegacyPFDB.lua
@@ -45,6 +46,7 @@ Tracker\TrackerFrame.lua
 UI\QuestLogEnhancements.lua
 Quest\Completion.lua
 Quest\EventAvailability.lua
+Quest\Progression.lua
 Quest\AvailableQuests.lua
 Quest\Objectives.lua
 Quest\ItemStarts.lua
